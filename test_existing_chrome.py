@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
 
 from business_suite_forms import (discover_fields, plan_form_values, validate_media_files)
 from existing_chrome import (
@@ -109,7 +109,7 @@ class ExistingChromeTests(unittest.TestCase):
                 return reply("OK")
 
         fake = DelayedSession()
-        with patch("existing_chrome.asyncio.sleep", new_callable=__import__("unittest").mock.AsyncMock):
+        with patch("existing_chrome.asyncio.sleep", new_callable=AsyncMock):
             result = asyncio.run(ChromeMCP(fake).meta_page())
         self.assertEqual(result, 2)
         self.assertEqual(sum(name == "new_page" for name, _ in fake.calls), 1)
