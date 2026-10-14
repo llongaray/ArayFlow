@@ -3,11 +3,11 @@ import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from business_suite_store import BusinessSuiteStore
 from publication_store import PublicationStore
-from business_suite_assistant import approved_rows, try_prefill
+from business_suite_assistant import approved_rows, try_prefill, launch_chrome_context
 from dashboard import create_app
 
 POST_ID = "ARAY-20261014-002"
@@ -73,6 +73,43 @@ class MetaSuiteTests(unittest.TestCase):
             def get_by_placeholder(self, *args, **kwargs): return Ambiguous()
         self.assertEqual(try_prefill(BrowserPage(), [Path("test.png")], "Legenda"),
                          {"images": False, "caption": False})
+
+    def test_uses_installed_chrome_with_persistent_separate_profile(self):
+        playwright = Mock()
+        browser_context = object()
+        playwright.chromium.launch_persistent_context.return_value = browser_context
+        with tempfile.TemporaryDirectory() as folder:
+            profile = Path(folder) / "playwright_chrome_profile"
+            result = launch_chrome_context(playwright, profile)
+            self.assertIs(result, browser_context)
+            kwargs = playwright.chromium.launch_persistent_context.call_args.kwargs
+            self.assertEqual(kwargs["channel"], "chrome")
+            self.assertEqual(kwargs["user_data_dir"], str(profile))
+            self.assertFalse(kwargs["headless"])
+            self.assertTrue(profile.is_dir())
+            # Perfil nao e eliminado ao fechar uma sessao; arquivos persistem.
+            marker = profile / "session-check.txt"
+            marker.write_text("persist", encoding="utf-8")
+            launch_chrome_context(playwright, profile)
+            self.assertEqual(marker.read_text(encoding="utf-8"), "persist")
+
+    def test_chrome_missing_has_actionable_error(self):
+        playwright = Mock()
+        playwright.chromium.launch_persistent_context.side_effect = RuntimeError(
+            "Executable doesn't exist at C:/Program Files/Google/Chrome/Application/chrome.exe"
+        )
+        with tempfile.TemporaryDirectory() as folder:
+            with self.assertRaisesRegex(RuntimeError, "Google Chrome nao encontrado"):
+                launch_chrome_context(playwright, Path(folder) / "chrome")
+
+    def test_rejects_reusing_busy_arayflow_profile(self):
+        playwright = Mock()
+        playwright.chromium.launch_persistent_context.side_effect = RuntimeError(
+            "ProcessSingleton: user data directory is already in use"
+        )
+        with tempfile.TemporaryDirectory() as folder:
+            with self.assertRaisesRegex(RuntimeError, "ja esta aberto"):
+                launch_chrome_context(playwright, Path(folder) / "chrome")
 
     def test_local_dashboard_get_and_no_destructive_actions(self):
         row = {
