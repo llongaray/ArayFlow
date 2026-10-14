@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 
 from business_suite_store import BusinessSuiteStore
+from publication_store import PublicationStore
 from google_client import BASE_DIR, authenticate, read_calendar, services
 from scheduled_publish import APPROVED, ensure_local, scheduled_time
 from sync_day import single_sync
@@ -186,19 +187,26 @@ def start_browser(rows: list[dict], drive, ledger: BusinessSuiteStore):
                 print("[AVISO] Nao foi possivel carregar a pagina inicial. Verifique a conexao.")
             print("Navegador visivel iniciado; faca login e MFA manualmente, se necessario.")
             print("Sessao isolada em data/playwright_meta_profile (ignorada no Git).")
-            for row in rows:
-                ident = row["ID"].strip()
-                if ledger.reserved(ident):
-                    print(f"[PROTEGIDO] {ident}: ja possui registro no assistente.")
-                    continue
-                due = scheduled_time(row)
-                if due <= datetime.now(ZONE):
-                    print(f"[IGNORADO] {ident}: horario ja passou.")
-                    continue
-                images = ensure_local(row, drive)
-                if not manual_schedule(page, row, images, ledger):
-                    print("[PARADO] Lote interrompido para conferencia. Demais posts nao foram alterados.")
-                    break
+            api = PublicationStore(DB_FILE)
+            try:
+                for row in rows:
+                    ident = row["ID"].strip()
+                    if api.get(ident):
+                        print(f"[PROTEGIDO] {ident}: ja possui conteiner/sessao Meta API; ignorado no Suite.")
+                        continue
+                    if ledger.reserved(ident):
+                        print(f"[PROTEGIDO] {ident}: ja possui registro no assistente.")
+                        continue
+                    due = scheduled_time(row)
+                    if due <= datetime.now(ZONE):
+                        print(f"[IGNORADO] {ident}: horario ja passou.")
+                        continue
+                    images = ensure_local(row, drive)
+                    if not manual_schedule(page, row, images, ledger):
+                        print("[PARADO] Lote interrompido para conferencia. Demais posts nao foram alterados.")
+                        break
+            finally:
+                api.close()
         finally:
             context.close()
 
