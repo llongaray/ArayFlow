@@ -1,7 +1,8 @@
-"""ArayFlow v0.7.1: assistente VISIVEL no Google Chrome instalado.
+"""ArayFlow v0.7.3: assistente visivel em Chrome pessoal ou isolado.
 
-O Playwright ajuda no upload e legenda, mas a data/hora, conta Instagram e
-botao final AGENDAR devem ser conferidos e acionados pelo operador.
+No modo existente, Chrome DevTools MCP tenta anexar artes e preencher
+legenda, data e horario quando encontra controles sem ambiguidade.
+Conta Instagram, fuso e botao final AGENDAR exigem verificacao humana.
 Nunca tenta contornar login, MFA, CAPTCHA ou restricoes da plataforma.
 """
 from __future__ import annotations
