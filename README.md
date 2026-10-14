@@ -971,3 +971,33 @@ Clear-Host; git pull origin main; if ($LASTEXITCODE -eq 0) { python -m unittest 
 O diagnostico inclui agora `[DATA/HORA] Segmentos acessiveis` e
 `Controles numericos sem nome`. A publicacao automatica via Graph API
 permanece desativada durante o uso assistido.
+
+
+### Inspecao DOM somente leitura para date/time (compositor PT-BR)
+
+Em outubro de 2026, o Business Suite expunha `combobox=2` e
+`spinbutton=2`, mas nao fornecia nomes de data/hora confiaveis no
+snapshot de acessibilidade. O ArayFlow ganhou uma **sondagem DOM segura**
+na mesma execucao de `--inspect-composer`:
+
+- Executa apenas `document.querySelectorAll` e leituras de atributos
+  no dominio exato `business.facebook.com`, sem clicar ou alterar a pagina
+- Retorna a estrutura dos elementos visiveis, como `select`, `input`,
+  `combobox` e `spinbutton`, em categorias predefinidas
+- Reconhece rotulos funcionais e limites conhecidos (0..23, 0..59 etc.)
+  sem registrar o valor escolhido
+- **Nao retorna** URLs, IDs de DOM, nomes arbitrarios, conteudo da
+  legenda, titulos de abas, tokens, cookies, calendario ou hora escolhida
+- Limita a listagem a 35 controles, sinalizando quando truncada
+
+No Windows PowerShell 5.1 (uma unica linha):
+
+```powershell
+Clear-Host; git pull origin main; if ($LASTEXITCODE -eq 0) { python -m unittest test_existing_chrome test_business_suite -v; if ($LASTEXITCODE -eq 0) { python business_suite_assistant.py --inspect-composer } }
+```
+
+Depois de ativar **Definir data e hora**, confirme os comandos no
+terminal. As linhas `[DOM]` explicam o tipo e o papel dos elementos
+de calendario e relogio. Isso **nao habilita o preenchimento automatico
+da data/hora**, que permanece manual ate validar o mapeamento correto
+na tela real; o clique final em **Programar** permanece manual.
