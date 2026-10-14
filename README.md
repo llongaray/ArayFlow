@@ -587,3 +587,84 @@ Para aplicar a correcao, pare o Flask com Ctrl+C, execute
 `python dashboard.py`. No Chrome, atualize `http://127.0.0.1:8766`
 com Ctrl+F5 e tente novamente. Se persistir, envie a linha de WARNING
 do terminal (incluindo Sec-Fetch-Site, sem compartilhar cookies).
+
+
+---
+
+## ArayFlow v0.7.2 — Chrome pessoal JA ABERTO e LOGADO
+
+O modo `--browser existing` conecta o assistente a sua sessao EXISTENTE do
+Google Chrome (Chrome 144+) usando o **Chrome DevTools MCP oficial** com
+`--autoConnect`. Ao contrario do modo isolado, **nao abre outro executavel
+Chrome nem cria um perfil novo**. Reutiliza as abas, login e cookies que ja
+estao abertos no Chrome, sem copiar cookies para arquivos.
+
+A conexao requer permissao manual dentro do Chrome e pode dar acesso ao
+conteudo de outras abas do perfil. Use apenas com codigos de confianca;
+desative o acesso de depuracao depois de usar. **Nao compartilhe o perfil
+ou seus dados de navegacao.** O ArayFlow so seleciona abas do dominio
+`business.facebook.com`, ou abre uma aba nova nesse dominio caso ainda
+nao exista; nunca le dados de outra aba intencionalmente.
+
+### Antes de iniciar
+
+1. Instale **Node.js 22+** e confirme no PowerShell:
+   `node -v` e `npx -v`.
+2. No Google Chrome que voce ja usa (e onde a Meta esta logada), acesse:
+   `chrome://inspect/#remote-debugging`.
+3. Ative **Allow remote debugging for this browser instance**.
+   Nao feche o seu Chrome pessoal.
+4. No `.env`, mantenha `ARAYFLOW_AUTOPUBLISH_ENABLED=false` e pause a
+   tarefa Windows `ArayFlow Publisher`.
+5. Atualize o projeto e instale os pacotes Python:
+
+```powershell
+git pull origin main
+python -m pip install -r requirements.txt
+python -m unittest test_arayflow test_r2 test_sync test_scheduler test_business_suite test_existing_chrome -v
+```
+
+### Pelo Flask (recomendado)
+
+```powershell
+python dashboard.py
+```
+
+Acesse http://127.0.0.1:8766 e selecione a data, na secao
+**Assistente Business Suite** clique em **Conectar ao meu Chrome ja aberto
+(logado)**. Uma janela de console abre o assistente; digite
+`CONECTAR CHROME` para solicitar acesso. O Chrome devera exibir uma
+solicitacao de permissao: escolha **Permitir** somente se reconhecer o
+ArayFlow. Um servidor MCP local e iniciado, mas nao e exposto na rede.
+
+O programa seleciona uma aba existente do Business Suite. Se nenhuma
+aba estiver aberta, abre uma nova aba do Business Suite DENTRO DO MESMO
+Chrome ja logado. Selecione o Instagram `@aray_solucoes` e abra o
+compositor. Digite `PRONTO` no console. Ele tenta carregar imagem(ns) e
+legenda somente se identificar os campos de forma nao ambigua; quando
+nao for possivel, preencha manualmente. **O assistente nao clica em
+Publicar nem Agendar**: confira data/hora/conta e clique em Agendar
+voce mesmo. Verifique o post no Planejador e confirme pelo console.
+
+O perfil exclusivo `data/playwright_chrome_profile` da versao anterior
+continua disponivel, sem migrar cookies, pelo botao alternativo de
+**Chrome em perfil isolado**. Nenhuma sessao anterior e apagada.
+
+### Pelo PowerShell (sem painel Flask)
+
+```powershell
+python business_suite_assistant.py --date 2026-10-14 --start --browser existing
+```
+
+O Chrome existente requer Chrome >=144, Node.js >=22 e acesso autorizado
+em `chrome://inspect/#remote-debugging`. Na primeira utilizacao,
+`npx` pode baixar o pacote npm oficial `chrome-devtools-mcp` da internet.
+
+**Limitacoes:** esta e uma integracao assistida e experimental. A Meta pode
+alterar os campos de upload e legenda; os preenchimentos automaticos podem
+falhar, voltando ao processo manual. O status "scheduled" no banco e
+registrado APENAS apos a confirmacao humana no Planejador.
+
+Mais informacoes:
+- https://developer.chrome.com/docs/devtools/agents/get-started/configuration
+- https://github.com/ChromeDevTools/chrome-devtools-mcp
