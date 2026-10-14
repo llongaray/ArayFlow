@@ -15,6 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from business_suite_dom_probe import READ_ONLY_SCHEDULE_JS, format_dom_probe
 from publication_store import PublicationStore
 
 from arayflow.editorial import scheduled_time
@@ -497,6 +498,18 @@ async def inspect_existing_composer() -> None:
                 if fields.caption_uid and texts['caption'] == 0:
                     print("[LEGENDA] Editor identificado por contexto do compositor "
                           "e exclusividade do textbox; confira antes de escrever.")
+                # Estrutura DOM sem texto, valores ou URL. Somente leitura.
+                try:
+                    await bridge.assert_meta_page(page_id)
+                    dom_result = await bridge.call(
+                        "evaluate_script", pageId=page_id,
+                        function=READ_ONLY_SCHEDULE_JS,
+                        waitForStableDom=False,
+                    )
+                    for line in format_dom_probe(dom_result):
+                        print(line)
+                except Exception:
+                    print("[DOM] Sondagem indisponivel; nenhuma alteracao feita.")
                 if fields.ambiguous:
                     print("[AMBIGUO] " + ", ".join(fields.ambiguous))
                 if not fields.date_uid or not fields.time_uid:
