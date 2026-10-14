@@ -276,6 +276,47 @@ def create_app(root: Path | None = None) -> Flask:
         return send_file(path, mimetype="image/png" if path.suffix.lower() == ".png" else "image/jpeg",
                          conditional=True, max_age=60)
 
+    @app.post("/business-suite/start")
+    def start_business_suite():
+        expected = session.get("csrf", "")
+        received = request.form.get("csrf", "")
+        if not expected or not received or not hmac.compare_digest(received, expected):
+            abort(403)
+        origin = request.headers.get("Origin")
+        if origin and origin not in {"http://127.0.0.1:8766", "http://localhost:8766"}:
+            abort(403)
+        if request.form.get("confirmation", "") != "ABRIR":
+            abort(400)
+        try:
+            day = parse_day(request.form.get("date"))
+        except ValueError:
+            abort(400)
+        if sys.platform != "win32":
+            flash("Abertura direta disponivel somente no Windows; use o comando do painel.", "error")
+            return redirect(url_for("dashboard", date=day))
+        if os.getenv("ARAYFLOW_AUTOPUBLISH_ENABLED", "").strip().lower() == "true":
+            flash("Desative ARAYFLOW_AUTOPUBLISH_ENABLED no .env e reinicie o Flask antes de abrir.", "error")
+            return redirect(url_for("dashboard", date=day))
+        if task_state() in {"Ready", "Running", "Queued"}:
+            flash("Pause primeiro a tarefa ArayFlow Publisher para evitar duplicatas.", "error")
+            return redirect(url_for("dashboard", date=day))
+        py = root / ".venv" / "Scripts" / "python.exe"
+        worker = root / "business_suite_assistant.py"
+        if not py.is_file() or not worker.is_file():
+            flash("Python .venv ou assistente nao encontrado na pasta do projeto.", "error")
+            return redirect(url_for("dashboard", date=day))
+        try:
+            subprocess.Popen(
+                [str(py), str(worker), "--date", day, "--start"],
+                cwd=str(root), creationflags=subprocess.CREATE_NEW_CONSOLE,
+                stdin=None, stdout=None, stderr=None,
+            )
+            flash("Assistente iniciado em nova janela. Confirme os agendamentos nela.", "success")
+        except OSError:
+            app.logger.exception("Nao foi possivel iniciar assistente local")
+            flash("Falha ao abrir o assistente no Windows.", "error")
+        return redirect(url_for("dashboard", date=day))
+
     @app.post("/scheduler/<action>")
     def scheduler_action(action):
         if action not in {"pause", "resume"}:
