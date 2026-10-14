@@ -146,6 +146,76 @@ class ChromeMCP:
         return outcome
 
 
+def connection_failure_details(error: BaseException) -> str:
+    """Diagnostico curto, com redacao; evita ocultar a causa em ExceptionGroup.
+
+    Jamais imprime cookies, headers Authorization ou URLs de abas visitadas.
+    """
+    found, visited = [], set()
+
+    def walk(exc, depth=0):
+        if id(exc) in visited or depth > 8 or len(found) >= 6:
+            return
+        visited.add(id(exc))
+        kind = type(exc).__name__
+        message = str(exc).splitlines()[0][:500] if str(exc).strip() else "sem descricao"
+        message = re.sub(r"https?://\\S+", "[URL]", message)
+        message = re.sub(
+            r"(?i)\\b(token|cookie|password|secret|authorization|api[_-]?key)\\b"
+            r"\\s*[:=]\\s*[^\\s,;]+",
+            r"\\1=[OCULTO]",
+            message,
+        )
+        # Descarta conteudo nao necessario de mensagens de processos externos.
+        found.append(f"{kind}: {message[:240]}")
+        for inner in getattr(exc, "exceptions", ()):
+            walk(inner, depth + 1)
+        cause = getattr(exc, "__cause__", None)
+        if cause is not None:
+            walk(cause, depth + 1)
+        context = getattr(exc, "__context__", None)
+        if context is not None and context is not cause:
+            walk(context, depth + 1)
+
+    walk(error)
+    return " | ".join(found)[:1000] or type(error).__name__
+
+
+async def diagnose_chrome_connection() -> None:
+    """Somente handshake MCP e contagem de abas Business Suite; NAO modifica abas."""
+    try:
+        from mcp import ClientSession, StdioServerParameters
+        from mcp.client.stdio import stdio_client
+    except ImportError as exc:
+        raise RuntimeError("SDK MCP ausente: execute pip install -r requirements.txt") from exc
+
+    command, args = server_command()
+    print("[DIAGNOSTICO] Chrome pessoal 144+ deve estar aberto com depuracao habilitada.")
+    print("[DIAGNOSTICO] O Chrome pedira sua autorizacao de conexao.")
+    if input("Digite DIAGNOSTICAR CHROME para conectar sem agendar: ").strip() != "DIAGNOSTICAR CHROME":
+        print("[CANCELADO] Nenhuma conexao iniciada.")
+        return
+    try:
+        params = StdioServerParameters(command=command, args=args)
+        async with stdio_client(params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                result = await session.call_tool("list_pages", arguments={})
+                if getattr(result, "isError", False):
+                    raise RuntimeError("Chrome DevTools MCP list_pages retornou erro")
+                count = len(parse_business_pages(extract_text(result)))
+                print(f"[OK] MCP conectado ao Chrome existente; abas Meta Business Suite: {count}.")
+                print("[OK] Nenhum post foi preparado, enviado ou agendado.")
+    except Exception as exc:
+        details = connection_failure_details(exc)
+        raise RuntimeError(
+            "Falha no diagnostico do Chrome DevTools MCP. "
+            f"Causa identificada: {details}. "
+            "Verifique Chrome 144+, chrome://inspect/#remote-debugging, "
+            "autorizacao no Chrome, e conexoes MCP concorrentes."
+        ) from exc
+
+
 async def schedule_existing_chrome(rows: list[dict], drive, ledger, db_file: Path) -> None:
     """Vincula somente apos consentimento explicito; nao acessa credenciais."""
     try:
@@ -236,10 +306,12 @@ async def schedule_existing_chrome(rows: list[dict], drive, ledger, db_file: Pat
                 finally:
                     api.close()
     except Exception as exc:
-        # Algumas versoes do SDK encapsulam erros em ExceptionGroup.
+        # O SDK MCP pode encapsular erros de inicializacao em ExceptionGroup.
+        # Preserve o diagnostico sem incluir URLs, credenciais ou cookies.
+        details = connection_failure_details(exc)
         raise RuntimeError(
-            "Nao foi possivel conectar ao Chrome pessoal. Confirme Chrome 144+, "
-            "Node.js 22+, permissao em chrome://inspect/#remote-debugging e "
-            "autorize o acesso na caixa de dialogo do navegador. "
-            "Nenhuma publicacao foi disparada automaticamente."
+            f"Falha no Chrome DevTools MCP: {details}. "
+            "Confirme depuracao em chrome://inspect/#remote-debugging, "
+            "autorize o pedido do navegador e verifique se outro MCP ja esta conectado. "
+            "O ArayFlow nunca clica em Publicar ou Agendar automaticamente."
         ) from exc
