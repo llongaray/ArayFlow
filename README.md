@@ -869,3 +869,23 @@ python business_suite_assistant.py --date 2026-10-14 --post ARAY-20261014-007 --
 Nao agende sem antes revisar legenda, ordem dos slides, conta,
 data, hora, fuso e confirmacao manual no Planejador. Mantenha a tarefa
 antiga Graph API desligada.
+
+
+### Compatibilidade com list_pages que inclui o titulo da aba
+
+Versoes recentes do Chrome DevTools MCP podem listar abas no formato
+\`2: Meta Business Suite (https://business.facebook.com/...) [selected]\`,
+enquanto versoes anteriores usavam \`2: https://business.facebook.com/...\`.
+O assistente aceita **ambos** sem depender do titulo e valida o
+hostname exato \`business.facebook.com\`.
+
+Antes da correcao, o Chrome podia listar 9 abas e o ArayFlow interpretar
+0 abas Meta mesmo com o Business Suite ja aberto. Isso nao era uma
+falha de login ou do WebSocket, mas uma incompatibilidade do parser.
+
+A inspecao deve reutilizar a aba Meta ja aberta e nao abrir varias abas.
+Se uma aba nova for realmente necessaria, abre somente uma. Os campos
+de formulario ainda precisam de validacao visual antes do primeiro
+agendamento, e nenhum clique final e realizado pelo robo.
+
+Referencia do formato: https://github.com/ChromeDevTools/chrome-devtools-mcp/issues/2156
