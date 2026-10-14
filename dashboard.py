@@ -336,6 +336,9 @@ def create_app(root: Path | None = None) -> Flask:
         if task_state() in {"Ready", "Running", "Queued"}:
             flash("Pause primeiro a tarefa ArayFlow Publisher para evitar duplicatas.", "error")
             return redirect(url_for("dashboard", date=day))
+        mode = request.form.get("browser", "isolated")
+        if mode not in {"existing", "isolated"}:
+            abort(400)
         py = root / ".venv" / "Scripts" / "python.exe"
         worker = root / "business_suite_assistant.py"
         if not py.is_file() or not worker.is_file():
@@ -343,11 +346,16 @@ def create_app(root: Path | None = None) -> Flask:
             return redirect(url_for("dashboard", date=day))
         try:
             subprocess.Popen(
-                [str(py), str(worker), "--date", day, "--start"],
+                [str(py), str(worker), "--date", day, "--start", "--browser", mode],
                 cwd=str(root), creationflags=subprocess.CREATE_NEW_CONSOLE,
                 stdin=None, stdout=None, stderr=None,
             )
-            flash("Assistente iniciado em nova janela. Confirme os agendamentos nela.", "success")
+            flash(
+                "Assistente iniciado em nova janela. "
+                + ("Autorize o Chrome pessoal quando solicitado." if mode == "existing"
+                   else "Perfil exclusivo do Chrome iniciado.")
+                + " Confirme agendamentos no terminal.", "success"
+            )
         except OSError:
             app.logger.exception("Nao foi possivel iniciar assistente local")
             flash("Falha ao abrir o assistente no Windows.", "error")
