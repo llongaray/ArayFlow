@@ -250,13 +250,21 @@ def main() -> int:
         help="isolated = Chrome com perfil exclusivo; existing = conectar ao Chrome ja aberto (MCP)",
     )
     parser.add_argument("--diagnose-chrome", action="store_true", help="Diagnostica conexao ao Chrome existente sem publicar ou ler Sheets")
+    parser.add_argument("--inspect-composer", action="store_true", help="Detecta campos do compositor no Chrome existente sem alterar posts")
     parser.add_argument("--status", action="store_true", help="Mostra registros SQLite sem acessar Meta")
     parser.add_argument("--confirm", metavar="ID", help="Confirma agendamento pendente apos verificar manualmente no Meta")
     args = parser.parse_args()
+    if args.diagnose_chrome and args.inspect_composer:
+        parser.error("Escolha somente uma opcao de diagnostico")
     if args.diagnose_chrome:
         import asyncio
         from existing_chrome import diagnose_chrome_connection
         asyncio.run(diagnose_chrome_connection())
+        return 0
+    if args.inspect_composer:
+        import asyncio
+        from existing_chrome import inspect_existing_composer
+        asyncio.run(inspect_existing_composer())
         return 0
     ledger = BusinessSuiteStore(DB_FILE)
     try:
