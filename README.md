@@ -569,3 +569,21 @@ Para atualizar, interrompa o Flask com `Ctrl+C`, execute `git pull origin main`,
 `python dashboard.py` e atualize a pagina com `Ctrl+F5`. O botão
 **Abrir assistente do Business Suite** volta a funcionar somente com
 `ARAYFLOW_AUTOPUBLISH_ENABLED=false` e a tarefa Windows desativada.
+
+
+### Correcao: Chrome envia Origin=null ao abrir o Business Suite (403)
+
+O Chrome pode enviar `Origin: null` ao submeter formulario do painel local,
+dependendo da politica de referencia do navegador ou de extensoes instaladas.
+O Flask agora retorna `Referrer-Policy: same-origin` e aceita o caso
+`Origin: null` **somente quando** `Sec-Fetch-Site: same-origin` indica que a
+requisicao veio da propria pagina, sempre exigindo token CSRF assinado e
+valido (ate 15 minutos). `Sec-Fetch-Site: cross-site`, origens externas
+e tokens invalidos continuam retornando HTTP 403.
+
+Para aplicar a correcao, pare o Flask com Ctrl+C, execute
+`git pull origin main`, depois
+`python -m unittest test_business_suite -v` e
+`python dashboard.py`. No Chrome, atualize `http://127.0.0.1:8766`
+com Ctrl+F5 e tente novamente. Se persistir, envie a linha de WARNING
+do terminal (incluindo Sec-Fetch-Site, sem compartilhar cookies).
