@@ -1001,3 +1001,45 @@ terminal. As linhas `[DOM]` explicam o tipo e o papel dos elementos
 de calendario e relogio. Isso **nao habilita o preenchimento automatico
 da data/hora**, que permanece manual ate validar o mapeamento correto
 na tela real; o clique final em **Programar** permanece manual.
+
+
+### Experimental v0.7.4: preencher somente data e horario em formulario aberto
+
+O log real do Chrome 155 identificou:
+- data: `input[type=text]` com label funcional `date`
+- hora: `input[role=spinbutton]`, limites 0 a 23
+- minuto: `input[role=spinbutton]`, limites 0 a 59
+
+Foi implementado um teste de interface **separado** do calendario
+editorial, Google Sheets, API, imagens e SQLite. Ele tenta preencher
+SOMENTE os tres campos depois de autorizacao explicita; retorna
+`verified` somente quando os tres valores permanecem no DOM apos
+os eventos de formulario. **Isso nao garante que o backend da Meta
+tenha aceitado os valores**. Sempre confira visualmente antes de usar
+o botao final de programacao.
+
+Com o Chrome pessoal aberto no Meta, conta correta selecionada,
+compositor `/latest/composer` carregado e `Definir data e hora`
+ativado:
+
+```powershell
+Clear-Host; git pull origin main; if ($LASTEXITCODE -eq 0) { python -m unittest test_existing_chrome test_business_suite -v; if ($LASTEXITCODE -eq 0) { python business_suite_assistant.py --test-schedule-fields --at 2026-10-15T17:00 } }
+```
+
+A data e hora de exemplo acima sao **somente para teste**. Substitua
+por um horario futuro da sua escolha. O programa solicita
+`TESTAR CAMPOS` e, depois, `PREENCHER DATA E HORA`.
+Caso o Meta recuse algum campo, aparecera `MANUAL`: ajuste
+manualmente e nao considere a validacao concluida.
+
+Para usar o preenchimento experimental como parte do fluxo normal
+de posts aprovados, habilite `ARAYFLOW_SUITE_SCHEDULE_PREFILL=true`
+no `.env` (ou na variavel de ambiente da sessao). Por seguranca,
+o padrao e **false** e ainda e necessaria a frase
+`PREENCHER DATA E HORA` a cada post. Nao habilite antes
+de testar o comando independente no Chrome real.
+
+O fluxo normal continua exigindo confirmacao no Planejador do Meta
+e registro separado no SQLite. A rotina **nunca clica em Programar,
+Agendar ou Publicar**. O agendador antigo da Graph API deve
+permanecer desativado para evitar duplicatas.
