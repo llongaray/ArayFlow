@@ -125,24 +125,33 @@
       {% endif %}
 
       <section class="section" id="business-suite">
-        <div class="heading"><div><div class="overline">v0.7.1 · PLAYWRIGHT</div><h2>Assistente Business Suite</h2></div><span class="tag">Navegador visível</span></div>
+        <div class="heading"><div><div class="overline">v0.7.2 · CHROME EXISTENTE</div><h2>Assistente Business Suite</h2></div><span class="tag">Navegador visível</span></div>
         <div class="suite-layout">
           <div class="panel suite-primary">
             <div class="suite-badge">FLUXO ASSISTIDO</div>
             <h3>Agende o dia inteiro em uma sessão.</h3>
-            <p>O Google Chrome instalado abre sua conta Meta com perfil separado, mantendo a sessão entre execuções; tenta preencher artes e legendas e apresenta cada post. Você confere o horário e clica em <strong>Agendar</strong> no Business Suite. O sistema só registra a confirmação após sua validação.</p>
+            <p>Você pode reutilizar as abas e o login do Chrome que já está aberto, sem criar outro perfil. O modo assistido tenta preencher artes e legenda no compositor, quando identifica os campos com segurança. Você confere o horário e clica em <strong>Agendar</strong> no Business Suite. O sistema só registra a confirmação após sua validação.</p>
             {% if autopublish %}<div class="notification error">A automação pela Graph API está AUTORIZADA no .env. Antes de usar o assistente Playwright, altere <code>ARAYFLOW_AUTOPUBLISH_ENABLED=false</code> e pause a tarefa Windows para evitar duplicatas.</div>{% endif %}
             {% if not autopublish and task_state not in ['Ready','Running','Queued'] %}
             <form action="{{ url_for('start_business_suite') }}" method="post" class="start-form">
               <input type="hidden" name="csrf" value="{{ csrf_start }}">
               <input type="hidden" name="date" value="{{ day }}">
               <input type="hidden" name="confirmation" value="ABRIR">
-              <button class="button primary" type="submit">◈ Abrir assistente do Business Suite</button>
+              <input type="hidden" name="browser" value="existing">
+              <button class="button primary" type="submit">◈ Conectar ao meu Chrome já aberto (logado)</button>
+            </form>
+            <p class="support-note"><strong>Antes de conectar:</strong> no Chrome onde seu Facebook já está logado, abra <code>chrome://inspect/#remote-debugging</code> e habilite o acesso de depuração remota. A conexão pede autorização no Chrome. Requer Chrome 144+ e Node.js 22+ instalado. Esse acesso pode alcançar outras abas do seu perfil; autorize somente o ArayFlow.</p>
+            <form action="{{ url_for('start_business_suite') }}" method="post" class="start-form isolated-form">
+              <input type="hidden" name="csrf" value="{{ csrf_start }}">
+              <input type="hidden" name="date" value="{{ day }}">
+              <input type="hidden" name="confirmation" value="ABRIR">
+              <input type="hidden" name="browser" value="isolated">
+              <button class="button outline" type="submit">Abrir Chrome em perfil isolado (alternativo)</button>
             </form>
             {% else %}
             <div class="notification error">O botao de abertura fica bloqueado ate desativar a API no .env e pausar a tarefa Windows. O assistente tambem verifica isso antes de iniciar.</div>
             {% endif %}
-            <div class="cli"><code id="suite-command">python business_suite_assistant.py --date {{ day }} --start</code><button type="button" class="copy-button" data-copy-target="suite-command">Copiar comando</button></div>
+            <div class="cli"><code id="suite-command">python business_suite_assistant.py --date {{ day }} --start --browser existing</code><button type="button" class="copy-button" data-copy-target="suite-command">Copiar comando</button></div>
             <div class="cli secondary-cli"><code id="suite-status-command">python business_suite_assistant.py --status</code><button type="button" class="copy-button" data-copy-target="suite-status-command">Copiar</button></div>
             <p class="support-note">Execute o comando no PowerShell com o <code>.venv</code> ativo. O assistente não clica no botão final nem tenta contornar autenticação. Não precisa deixar o computador ligado após confirmar os posts no Business Suite.</p>
           </div>
@@ -150,7 +159,7 @@
             <h3>Como funciona</h3>
             <ol>
               <li><b>Revisão</b><span>Aprove os posts no Google Sheets.</span></li>
-              <li><b>Login</b><span>Entre na Meta pelo Chromium isolado.</span></li>
+              <li><b>Chrome existente</b><span>Autorize a conexão ao perfil já logado.</span></li>
               <li><b>Preenchimento</b><span>Confira Instagram, artes e legendas.</span></li>
               <li><b>Agendamento</b><span>Selecione data e hora e clique em Agendar.</span></li>
               <li><b>Confirmação</b><span>Verifique no Planejador e registre no terminal.</span></li>
