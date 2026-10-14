@@ -527,3 +527,25 @@ Painel local: http://127.0.0.1:8766
 no computador. Nao compartilhe `data/playwright_chrome_profile/`.
 O assistente ainda exige que voce confira e confirme manualmente a
 programacao no Planejador do Meta Business Suite.
+
+
+### Correcao do erro 403 ao pausar ou retomar pelo Flask
+
+O painel em `http://127.0.0.1:8766` usa tokens assinados por acao,
+validos por **15 minutos**. Os formularios nao dependem de o navegador
+preservar cookies de sessao para validar CSRF. Cada botao possui um token
+especifico; requisicoes sem token, com token vencido, reutilizado em outra
+acao ou de origem externa continuam bloqueadas.
+
+Se visualizar `403 Forbidden`:
+1. Volte a `http://127.0.0.1:8766`, atualize a pagina (`Ctrl+F5`)
+   e envie o formulario novamente em menos de 15 minutos.
+2. Verifique no terminal Flask o motivo (token ou origem); o programa nao
+   grava valores sensiveis dos tokens nos logs.
+3. Para desativar a tarefa sem o painel, utilize
+   `Disable-ScheduledTask -TaskName "ArayFlow Publisher"` no PowerShell
+   e confirme o estado com
+   `(Get-ScheduledTask -TaskName "ArayFlow Publisher").State`.
+
+Depois de `git pull origin main`, **reinicie o servidor Flask** para que
+a correcao seja carregada. Nenhum token, senha ou cookie foi publicado no Git.
