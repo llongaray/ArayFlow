@@ -203,6 +203,7 @@ class MetaSuiteTests(unittest.TestCase):
              patch("dashboard.get_calendar", return_value=[]), \
              patch("dashboard.task_state", return_value="Disabled"), \
              patch("dashboard.sys.platform", "win32"), \
+             patch("dashboard.subprocess.CREATE_NEW_CONSOLE", 16, create=True), \
              patch("dashboard.subprocess.Popen") as popen:
             page = app.test_client().get("/?date=2026-10-14",
                                          headers={"Host": "127.0.0.1:8766"})
