@@ -38,7 +38,6 @@ READ_ONLY_SCHEDULE_JS = r"""() => {
     if (min === 1 && max === 12) return "hour-12-or-month";
     if (min === 0 && max === 59) return "minute";
     if (min === 1 && max === 31) return "day";
-    if (min === 1 && max === 12) return "month";
     return "other";
   };
   for (const el of document.querySelectorAll(selector)) {
@@ -109,9 +108,9 @@ def format_dom_probe(mcp_text: str) -> list[str]:
     items = result.get("controls")
     if not isinstance(items, list):
         return ["[DOM] Formato dos controles inesperado."]
-    output = [
-        f"[DOM] Controles de formulario visiveis: {min(max(int(result.get('total', 0)), 0), 999)}"
-    ]
+    total = result.get("total")
+    total = min(total, 999) if type(total) is int and 0 <= total else len(items)
+    output = [f"[DOM] Controles de formulario visiveis: {total}"]
     for n, item in enumerate(items[:35], start=1):
         if not isinstance(item, dict):
             continue
