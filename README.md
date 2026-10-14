@@ -943,3 +943,31 @@ Clear-Host; git pull origin main; if ($LASTEXITCODE -eq 0) { python -m unittest 
 Os testes offline nao substituem a primeira observacao do snapshot
 real. O sistema NAO passa a preencher data e hora baseado somente em
 texto visual semelhante: isso exige identificar os controles editaveis.
+
+
+### Compositor PT-BR: legenda com rotulo externo e campos numericos
+
+A inspecao real de 14/10/2026 revelou apenas **um textbox**
+associado visualmente ao rotulo "Texto", mas seu nome acessivel era
+diferente. O ArayFlow agora aceita um fallback **somente no compositor**
+quando: existe "Criar post", "Programar", o botao de adicionar midia,
+rotulo "Texto", exatamente um textbox com nome e esse nome nao indica
+busca, comentarios, e-mail ou outra finalidade. Quando falhar qualquer
+uma dessas verificacoes, legenda permanece MANUAL.
+
+A tela Meta tinha ainda dois `combobox` e dois `spinbutton`.
+A inspecao agora informa quantos controles parecem representar dia,
+mes, ano, hora ou minuto, **sem imprimir valores, rotulos completos ou
+IDs**. Isso nao autoriza o robô a escolher uma data ou hora pelo
+numero de controles: ate verificarmos os nomes/valores reais, ambos
+continuam MANUAL. Clique final em Programar/Agendar sempre manual.
+
+No PowerShell 5.1 (um comando):
+
+```powershell
+Clear-Host; git pull origin main; if ($LASTEXITCODE -eq 0) { python -m unittest test_existing_chrome test_business_suite -v; if ($LASTEXITCODE -eq 0) { python business_suite_assistant.py --inspect-composer } }
+```
+
+O diagnostico inclui agora `[DATA/HORA] Segmentos acessiveis` e
+`Controles numericos sem nome`. A publicacao automatica via Graph API
+permanece desativada durante o uso assistido.
