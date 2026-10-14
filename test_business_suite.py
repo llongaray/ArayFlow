@@ -170,22 +170,25 @@ class MetaSuiteTests(unittest.TestCase):
              patch("dashboard.task_state", return_value="Ready"):
             page = app.test_client().get("/", headers={"Host": "127.0.0.1:8766"})
         token = re.search(
-            r'<form[^>]+action="/business-suite/start"[^>]*>.*?'
+            r'<form[^>]+action="/scheduler/pause"[^>]*>.*?'
             r'<input[^>]+name="csrf"[^>]+value="([^"]+)"',
             page.get_data(as_text=True), re.S,
         )
-        # Neste teste o botao Business Suite e renderizado porque a chave
-        # do .env pode estar configurada; se nao, testar emissao pela rota
-        # de agendamento que sempre esta presente no monitoramento.
-        if token:
-            with patch("dashboard.change_task") as change_task:
-                wrong = app.test_client().post(
-                    "/scheduler/pause",
-                    data={"csrf": token.group(1), "confirmation": "PAUSAR"},
-                    headers={"Host": "127.0.0.1:8766"},
-                )
-            self.assertEqual(wrong.status_code, 403)
-            change_task.assert_not_called()
+        self.assertIsNotNone(token)
+        with patch("dashboard.change_task") as change_task:
+            wrong = app.test_client().post(
+                "/scheduler/resume",
+                data={"csrf": token.group(1), "confirmation": "RETOMAR"},
+                headers={"Host": "127.0.0.1:8766"},
+            )
+            invalid_origin = app.test_client().post(
+                "/scheduler/pause",
+                data={"csrf": token.group(1), "confirmation": "PAUSAR"},
+                headers={"Host": "127.0.0.1:8766", "Origin": "https://example.invalid"},
+            )
+        self.assertEqual(wrong.status_code, 403)
+        self.assertEqual(invalid_origin.status_code, 403)
+        change_task.assert_not_called()
 
     def test_dashboard_start_requires_csrf(self):
         app = create_app(root=self.root)
