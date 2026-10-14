@@ -378,6 +378,13 @@ efetuar agendamentos reais**.
 python dashboard.py
 ```
 
+Acesse **http://127.0.0.1:8766**. Depois de desativar a API no `.env`
+e pausar `ArayFlow Publisher`, escolha a data e clique em
+**Abrir assistente do Business Suite**. O Flask abre uma janela de console
+Windows interativa, que inicia o Chromium e faz as perguntas de confirmacao.
+O botao nao funciona se a publicacao automatica por API ainda estiver ativa.
+Reinicie o Flask depois de mudar o `.env` para que a configuracao seja relida.
+
 Acesse **http://127.0.0.1:8766**. O painel exibe publicacoes da planilha,
 artes baixadas, legenda, historico SQLite, R2 e os status da API/Business Suite.
 A unica acao administrativa web disponivel e pausar/retomar explicitamente
