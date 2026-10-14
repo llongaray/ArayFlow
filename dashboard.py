@@ -187,8 +187,15 @@ def create_app(root: Path | None = None) -> Flask:
             app.logger.warning("Acao %s negada: token pertence a outra acao", action)
             abort(403, description="Token nao corresponde a esta acao.")
         origin = request.headers.get("Origin")
-        if origin and origin != request.host_url.rstrip("/"):
-            app.logger.warning("Acao %s negada: origem diferente do painel local", action)
+        # O painel aceita apenas os dois nomes locais equivalentes. Diferencas
+        # entre localhost e 127.0.0.1 nao devem bloquear formularios legitimos.
+        # O token assinado acima continua obrigatorio para todas as acoes.
+        local_origins = {"http://127.0.0.1:8766", "http://localhost:8766"}
+        if origin and origin not in local_origins:
+            app.logger.warning(
+                "Acao %s negada: Origin=%r Host=%r; somente origem local permitida",
+                action, origin[:160], request.host[:160],
+            )
             abort(403, description="A origem da requisicao nao corresponde ao painel local.")
 
     def cached_rows(force=False):
