@@ -1,4 +1,4 @@
-"""ArayFlow Dashboard v0.7.1 - painel web LOCAL para acompanhar calendario e automacao.
+"""ArayFlow Dashboard v0.7.2 - painel web LOCAL para acompanhar calendario e automacao.
 
 Nao publica na Meta, nao remove arquivos R2 e nao altera o Google Sheets.
 Apenas a pausa/retomada explicita da tarefa Windows realiza uma modificacao.
