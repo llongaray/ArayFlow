@@ -179,6 +179,83 @@ class ExistingChromeTests(unittest.TestCase):
         self.assertTrue(diagnostic["date_text_visible"])
         self.assertTrue(diagnostic["time_text_visible"])
 
+    def test_single_named_editor_in_meta_composer_has_safe_caption_fallback(self):
+        snapshot = (
+            'uid=9_1 heading "Criar post"\n'
+            'uid=9_2 button "Adicionar foto/vídeo"\n'
+            'uid=9_3 generic "Texto"\n'
+            'uid=9_4 textbox "Escreva algo sobre esse conteúdo" multiline\n'
+            'uid=9_5 switch "Definir data e hora" checked\n'
+            'uid=9_6 heading "Programar"\n'
+            'uid=9_7 combobox "outubro"\n'
+            'uid=9_8 spinbutton "Hora"\n'
+            'uid=9_9 spinbutton "Minuto"\n'
+            'uid=9_10 button "Programar"\n'
+        )
+        fields = discover_fields(snapshot)
+        self.assertEqual(fields.caption_uid, "9_4")
+        self.assertEqual(fields.upload_uid, "9_2")
+        self.assertIsNone(fields.date_uid)
+        self.assertIsNone(fields.time_uid)
+        shapes = safe_control_shapes(snapshot)
+        self.assertEqual(shapes["segments"]["month"], ("combobox",))
+        self.assertEqual(shapes["segments"]["hour"], ("spinbutton",))
+        self.assertEqual(shapes["segments"]["minute"], ("spinbutton",))
+
+    def test_caption_context_fallback_rejects_search_field(self):
+        snapshot = (
+            'uid=4_1 heading "Criar post"\n'
+            'uid=4_2 button "Adicionar foto/vídeo"\n'
+            'uid=4_3 generic "Texto"\n'
+            'uid=4_4 textbox "Pesquisar publicações"\n'
+            'uid=4_5 heading "Programar"\n'
+        )
+        self.assertIsNone(discover_fields(snapshot).caption_uid)
+
+    def test_caption_context_fallback_requires_composer_context(self):
+        snapshot = (
+            'uid=4_1 generic "Texto"\n'
+            'uid=4_2 textbox "Conteúdo"\n'
+            'uid=4_3 heading "Programar"\n'
+        )
+        self.assertIsNone(discover_fields(snapshot).caption_uid)
+
+    def test_caption_context_fallback_refuses_two_textboxes(self):
+        snapshot = (
+            'uid=4_1 heading "Criar post"\n'
+            'uid=4_2 button "Adicionar foto/vídeo"\n'
+            'uid=4_3 generic "Texto"\n'
+            'uid=4_4 textbox "Escreva sobre o post"\n'
+            'uid=4_5 textbox "Escreva outra informação"\n'
+            'uid=4_6 heading "Programar"\n'
+        )
+        self.assertIsNone(discover_fields(snapshot).caption_uid)
+
+    def test_caption_context_fallback_requires_named_editor(self):
+        snapshot = (
+            'uid=4_1 heading "Criar post"\n'
+            'uid=4_2 button "Adicionar foto/vídeo"\n'
+            'uid=4_3 generic "Texto"\n'
+            'uid=4_4 textbox\n'
+            'uid=4_5 heading "Programar"\n'
+        )
+        self.assertIsNone(discover_fields(snapshot).caption_uid)
+
+    def test_metadata_counts_do_not_expose_calendar_values_or_labels(self):
+        snapshot = (
+            'uid=4_1 combobox "outubro"\n'
+            'uid=4_2 spinbutton "Hora"\n'
+            'uid=4_3 spinbutton "Minuto"\n'
+            'uid=4_4 spinbutton\n'
+        )
+        info = safe_control_shapes(snapshot)
+        self.assertEqual(info["unnamed_spinbuttons"], 1)
+        self.assertEqual(info["segments"]["month"], ("combobox",))
+        self.assertEqual(info["segments"]["hour"], ("spinbutton",))
+        self.assertEqual(info["segments"]["minute"], ("spinbutton",))
+        for hidden in ("outubro", "uid=", "4_2"):
+            self.assertNotIn(hidden, str(info))
+
     def test_existing_business_tab_is_reused_without_new_browser(self):
         fake = FakeSession(
             "## Pages\n1: https://google.com/\n"
