@@ -233,6 +233,11 @@ def safe_control_shapes(snapshot: str) -> dict[str, object]:
     }
     date_roles: set[str] = set()
     time_roles: set[str] = set()
+    segment_roles = {
+        "day": set(), "month": set(), "year": set(),
+        "hour": set(), "minute": set(),
+    }
+    unlabeled_spins = 0
     for line in snapshot.splitlines():
         found = _CONTROL.match(line)
         if found is None:
@@ -242,6 +247,19 @@ def safe_control_shapes(snapshot: str) -> dict[str, object]:
         counts[role if role in counts else "other"] += 1
         label_match = _LABEL.search(detail)
         label = label_match.group(1).strip() if label_match else ""
+        if role == "spinbutton" and not label:
+            unlabeled_spins += 1
+        if role in {"combobox", "spinbutton", "button", "input"} and label:
+            if re.search(r"(?i)\\b(?:dia|day)\\b", label):
+                segment_roles["day"].add(role)
+            if re.search(r"(?i)\\b(?:m[eê]s|month|janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\\b", label):
+                segment_roles["month"].add(role)
+            if re.search(r"(?i)\\b(?:ano|year)\\b", label):
+                segment_roles["year"].add(role)
+            if re.search(r"(?i)\\b(?:hora|hor[aá]rio|hour)\\b", label):
+                segment_roles["hour"].add(role)
+            if re.search(r"(?i)\\b(?:minutos?|minutes?)\\b", label):
+                segment_roles["minute"].add(role)
         if role == "textbox":
             if not label:
                 textbox_types["unnamed"] += 1
@@ -265,4 +283,6 @@ def safe_control_shapes(snapshot: str) -> dict[str, object]:
         "time_value_roles": tuple(sorted(time_roles)),
         "date_text_visible": bool(_DATE_AS_TEXT.search(snapshot)),
         "time_text_visible": bool(_TIME_AS_TEXT.search(snapshot)),
+        "segments": {key: tuple(sorted(value)) for key, value in segment_roles.items()},
+        "unnamed_spinbuttons": unlabeled_spins,
     }
