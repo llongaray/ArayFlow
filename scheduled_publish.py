@@ -264,6 +264,10 @@ def run_once(live: bool, now: datetime | None = None, *, sheets=None, drive=None
         for row, stage in actionable:
             post_id = row["ID"].strip()
             try:
+                # Agendamentos Business Suite (inclusive pendentes) bloqueiam media_publish pela API.
+                if isinstance(store, PublicationStore) and store.business_suite_reserved(post_id):
+                    LOG.info("%s: reservado pelo Business Suite; API ignorada", post_id)
+                    continue
                 current = store.get(post_id)
                 if not current:
                     prepare_post(row, store, publisher, drive, storage, sessions, day, now)
