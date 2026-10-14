@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from existing_chrome import (
     ChromeMCP, extract_text, parse_business_pages, server_command, unique_uid,
-    CAPTION_TERMS, UPLOAD_TERMS,
+    CAPTION_TERMS, UPLOAD_TERMS, connection_failure_details,
 )
 import re
 
@@ -106,6 +106,25 @@ class ExistingChromeTests(unittest.TestCase):
                 return reply("irrelevant", error=True)
         with self.assertRaisesRegex(RuntimeError, "Chrome DevTools MCP"):
             asyncio.run(ChromeMCP(Failure()).call("list_pages"))
+
+    def test_connection_error_unwraps_nested_exception_groups(self):
+        inner = RuntimeError("Chrome remote debugging is disabled")
+        grouped = ExceptionGroup("MCP transport failed", [inner])
+        summary = connection_failure_details(grouped)
+        self.assertIn("ExceptionGroup", summary)
+        self.assertIn("Chrome remote debugging is disabled", summary)
+
+    def test_diagnostics_mask_private_urls_and_tokens(self):
+        error = RuntimeError(
+            "Unable to connect https://example.invalid/hidden?token=abc123 "
+            "authorization:BearerPrivate cookie=sessionvalue"
+        )
+        summary = connection_failure_details(error)
+        self.assertNotIn("example.invalid", summary)
+        self.assertNotIn("abc123", summary)
+        self.assertNotIn("BearerPrivate", summary)
+        self.assertNotIn("sessionvalue", summary)
+        self.assertIn("[URL]", summary)
 
     def test_node_missing_has_actionable_error(self):
         with patch("existing_chrome.shutil.which", return_value=None):
