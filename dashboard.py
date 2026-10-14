@@ -60,7 +60,7 @@ def slides_for(root: Path, post_id: str) -> list[Path]:
 
 def snapshot(root: Path):
     """Le SQLite em modo read-only. Nao cria nem altera bancos existentes."""
-    data = {"publications": {}, "sessions": [], "events": [], "asset_count": 0}
+    data = {"publications": {}, "suite": {}, "sessions": [], "events": [], "asset_count": 0}
     database = root / "data" / "arayflow.sqlite3"
     if not database.is_file():
         return data
@@ -69,6 +69,7 @@ def snapshot(root: Path):
         con.row_factory = sqlite3.Row
         for table, query, key in [
             ("publications", "SELECT post_id,status,media_id,container_id,updated_at FROM publications", "publications"),
+            ("business_suite_schedule", "SELECT post_id,target_at,status,note,updated_at FROM business_suite_schedule", "suite"),
             ("daily_syncs", "SELECT day,status,updated_at,last_error FROM daily_syncs ORDER BY updated_at DESC LIMIT 8", "sessions"),
             ("r2_events", "SELECT day,action,object_key,created_at FROM r2_events ORDER BY id DESC LIMIT 12", "events"),
             ("r2_assets", "SELECT COUNT(*) AS total FROM r2_assets", "asset_count"),
@@ -77,7 +78,7 @@ def snapshot(root: Path):
             if not exists:
                 continue
             rows = [dict(row) for row in con.execute(query).fetchall()]
-            if key == "publications":
+            if key in {"publications", "suite"}:
                 data[key] = {row["post_id"]: row for row in rows}
             elif key == "asset_count":
                 data[key] = rows[0]["total"] if rows else 0
@@ -214,6 +215,7 @@ def create_app(root: Path | None = None) -> Flask:
             if not POST_ID.fullmatch(post_id):
                 continue
             status = db["publications"].get(post_id, {})
+            suite = db["suite"].get(post_id, {})
             images = slides_for(root, post_id)
             try:
                 stage = decision(row, now)
@@ -225,6 +227,8 @@ def create_app(root: Path | None = None) -> Flask:
                 "caption": row.get("Legenda pronta", ""), "expected": row.get("Qtd. imagens", ""),
                 "local_count": len(images), "has_cover": bool(images),
                 "stage": stage, "publication_status": status.get("status", "not_started"),
+                "suite_status": suite.get("status", "not_started"),
+                "suite_target": suite.get("target_at"),
                 "media_id": status.get("media_id"), "container_id": status.get("container_id"),
                 "updated_at": status.get("updated_at"),
                 "drive_link": row.get("Pasta das imagens", ""),
@@ -252,6 +256,8 @@ def create_app(root: Path | None = None) -> Flask:
             approved=sum(p["approved"] for p in posts),
             published=sum(p["publication_status"] == "published" for p in posts),
             prepared=sum(p["publication_status"] == "prepared" for p in posts),
+            suite_scheduled=sum(p["suite_status"] == "scheduled" for p in posts),
+            suite_pending=sum(p["suite_status"] in ("awaiting_confirmation", "needs_review") for p in posts),
             failures=sum(p["publication_status"] in ("uncertain", "failed", "preparing") for p in posts),
             spreadsheet_url="https://docs.google.com/spreadsheets/d/" +
                 os.getenv("GOOGLE_SPREADSHEET_ID", "1dA5GFM2qS6RXzpgEiBXLHO4uYkwp4l46B17dCZCcZKM") + "/edit",
