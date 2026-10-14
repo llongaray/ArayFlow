@@ -86,6 +86,41 @@ class FormFields:
     ambiguous: tuple[str, ...] = ()
 
 
+_UNRELATED_FIELD_NAME = re.compile(
+    r"pesquis|buscar|search|procur|e-?mail|destinat|recipient|senha|password|"
+    r"telefone|phone|comment|coment[aá]rio|localiza[cç][aã]o|location",
+    re.I,
+)
+
+
+def _safe_caption_fallback(snapshot: str, controls: list[Control]) -> str | None:
+    """Reconhece um editor de legenda por CONTEXTO, nao por nome arbitrario.
+
+    O Meta portugues exibe 'Texto' como label visual, mas o unico textbox
+    acessivel pode ter outro nome. Recusa se nao houver evidencias suficientes
+    do compositor ou houver outros textboxes.
+    """
+    if not (
+        re.search(r"(?i)criar\s+(?:post|publica[cç][aã]o)", snapshot)
+        and re.search(r"(?i)programar", snapshot)
+        and any(_UPLOAD.fullmatch(ctrl.label) for ctrl in controls
+                if ctrl.role in _UPLOAD_ROLES)
+        and (
+            any(ctrl.label.casefold() == "texto" for ctrl in controls)
+            or re.search(r"(?mi)^\s*(?:[-*]\s*)?(?:text:\s*)?Texto\s*$", snapshot)
+        )
+    ):
+        return None
+    textboxes = [ctrl for ctrl in controls if ctrl.role == "textbox"]
+    if len(textboxes) != 1:
+        return None
+    control = textboxes[0]
+    # Nao inferir o campo de legenda a partir de caixas sem nome ou buscas.
+    if not control.label or _UNRELATED_FIELD_NAME.search(control.label):
+        return None
+    return control.uid
+
+
 def discover_fields(snapshot: str) -> FormFields:
     controls = parse_controls(snapshot)
     caption, cap_amb = _unique(controls, _CAPTION, _TEXT_ROLES)
@@ -96,6 +131,8 @@ def discover_fields(snapshot: str) -> FormFields:
         ("legenda", cap_amb), ("imagens", upload_amb),
         ("data", date_amb), ("horario", time_amb)
     ) if is_amb)
+    if not caption and not cap_amb:
+        caption = _safe_caption_fallback(snapshot, controls)
     # Nao preenche somente data ou somente hora: evitar agendamento parcial.
     if date is None or time is None:
         date = time = None
@@ -105,7 +142,6 @@ def discover_fields(snapshot: str) -> FormFields:
     ):
         date = time = None
     return FormFields(caption, upload, date, time, ambiguous)
-
 
 def plan_form_values(fields: FormFields, caption: str,
                      when: datetime) -> list[dict[str, str]]:
