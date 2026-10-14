@@ -29,7 +29,7 @@
       <a href="https://business.facebook.com/" target="_blank" rel="noopener noreferrer">↗ <span>Business Suite</span></a>
       <a href="https://github.com/llongaray/ArayFlow" target="_blank" rel="noopener noreferrer">↗ <span>Repositório</span></a>
     </nav>
-    <div class="sidebar-footer"><span class="online-dot"></span> Painel local <small>v0.7.0</small></div>
+    <div class="sidebar-footer"><span class="online-dot"></span> Painel local <small>v0.7.1</small></div>
   </aside>
 
   <main class="main">
@@ -125,12 +125,12 @@
       {% endif %}
 
       <section class="section" id="business-suite">
-        <div class="heading"><div><div class="overline">v0.7.0 · PLAYWRIGHT</div><h2>Assistente Business Suite</h2></div><span class="tag">Navegador visível</span></div>
+        <div class="heading"><div><div class="overline">v0.7.1 · PLAYWRIGHT</div><h2>Assistente Business Suite</h2></div><span class="tag">Navegador visível</span></div>
         <div class="suite-layout">
           <div class="panel suite-primary">
             <div class="suite-badge">FLUXO ASSISTIDO</div>
             <h3>Agende o dia inteiro em uma sessão.</h3>
-            <p>O navegador abre sua conta Meta, tenta preencher artes e legendas e apresenta cada post. Você confere o horário e clica em <strong>Agendar</strong> no Business Suite. O sistema só registra a confirmação após sua validação.</p>
+            <p>O Google Chrome instalado abre sua conta Meta com perfil separado, mantendo a sessão entre execuções; tenta preencher artes e legendas e apresenta cada post. Você confere o horário e clica em <strong>Agendar</strong> no Business Suite. O sistema só registra a confirmação após sua validação.</p>
             {% if autopublish %}<div class="notification error">A automação pela Graph API está AUTORIZADA no .env. Antes de usar o assistente Playwright, altere <code>ARAYFLOW_AUTOPUBLISH_ENABLED=false</code> e pause a tarefa Windows para evitar duplicatas.</div>{% endif %}
             {% if not autopublish and task_state not in ['Ready','Running','Queued'] %}
             <form action="{{ url_for('start_business_suite') }}" method="post" class="start-form">
@@ -193,7 +193,7 @@
 {% else %}Nenhum evento recente. O painel Flask não executa publicações diretamente.
 {% endfor %}</pre></div>
       </section>
-      <footer class="footer">ARAY SOLUÇÕES · ArayFlow v0.7.0 · Interface local sem acesso público</footer>
+      <footer class="footer">ARAY SOLUÇÕES · ArayFlow v0.7.1 · Interface local sem acesso público</footer>
     </div>
   </main>
 </div>
