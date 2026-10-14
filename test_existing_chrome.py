@@ -202,6 +202,37 @@ class ExistingChromeTests(unittest.TestCase):
         self.assertEqual(shapes["segments"]["hour"], ("spinbutton",))
         self.assertEqual(shapes["segments"]["minute"], ("spinbutton",))
 
+    def test_caption_fallback_prefill_never_changes_calendar_or_clicks_final_button(self):
+        snapshot = (
+            'uid=1_1 heading "Criar post"\n'
+            'uid=1_2 button "Adicionar foto/vídeo"\n'
+            'uid=1_3 generic "Texto"\n'
+            'uid=1_4 textbox "Escreva sobre seu post" multiline\n'
+            'uid=1_5 heading "Programar"\n'
+            'uid=1_6 combobox "outubro"\n'
+            'uid=1_7 spinbutton "Hora"\n'
+            'uid=1_8 spinbutton "Minuto"\n'
+            'uid=1_9 button "Programar"\n'
+        )
+        fake = FakeSession(
+            "## Pages\n1: https://business.facebook.com/latest/composer",
+            [snapshot, snapshot],
+        )
+        when = datetime.now(ZoneInfo("America/Sao_Paulo")) + timedelta(days=2)
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "slide.png"
+            path.write_bytes(b"PNG")
+            flags = asyncio.run(ChromeMCP(fake).prefill(1, [path], "Legenda nova", when))
+        self.assertEqual(flags, {
+            "images": True, "caption": True, "date": False, "time": False
+        })
+        filled = [details for name, details in fake.calls if name == "fill_form"]
+        self.assertEqual(len(filled), 1)
+        self.assertEqual(filled[0]["elements"], [
+            {"uid": "1_4", "value": "Legenda nova"},
+        ])
+        self.assertNotIn("click", [name for name, _ in fake.calls])
+
     def test_caption_context_fallback_rejects_search_field(self):
         snapshot = (
             'uid=4_1 heading "Criar post"\n'
