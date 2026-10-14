@@ -203,7 +203,7 @@ class ChromeMCP:
         return extract_text(result)
 
     async def meta_page(self, *, create_if_missing: bool = True) -> int:
-        """Seleciona a aba correta; inspecao nao abre novas abas.
+        """Seleciona a aba correta; abre o Business Suite se necessario.
 
         Apos new_page, a aba pode demorar alguns instantes a carregar ou
         redirecionar ao login. Nunca usa ID presumido do navegador.
@@ -220,6 +220,17 @@ class ChromeMCP:
                     break
                 if attempt < 6:
                     await asyncio.sleep(0.4)
+        if not options and create_if_missing:
+            print("[CHROME] A aba do Business Suite ainda nao foi identificada.")
+            print("[CHROME] Caso tenha aberto uma pagina de login, conclua o acesso")
+            print("no navegador. Nao feche o Chrome pessoal nem desligue a depuracao.")
+            answer = input(
+                "Quando a barra de enderecos mostrar business.facebook.com, "
+                "digite VERIFICAR ABA (ou Enter para cancelar): "
+            ).strip()
+            if answer == "VERIFICAR ABA":
+                listing = await self.call("list_pages")
+                options = parse_business_pages(listing)
         if not options:
             # Nunca registrar URL, titulo nem snapshot de outras abas.
             total_pages = len(re.findall(r"(?m)^\s*(?:[-*]\s*)?\d+:\s+", listing))
@@ -397,9 +408,9 @@ async def inspect_existing_composer() -> None:
     except ImportError as exc:
         raise RuntimeError("SDK MCP ausente: execute pip install -r requirements.txt") from exc
     command, args = server_command()
-    print("[INSPECAO] No Chrome pessoal, abra o compositor Business Suite,")
-    print("selecione a conta Instagram e exiba as opcoes Data e Horario.")
-    print("[INSPECAO] Apenas identifica UIDs. Nao envia imagens, preenche campos,")
+    print("[INSPECAO] O ArayFlow reutiliza uma aba Meta existente ou abre uma")
+    print("nova aba do Business Suite no Chrome pessoal, se nao encontrar nenhuma.")
+    print("[INSPECAO] O assistente nao envia imagens, preenche campos,")
     print("nem cria reserva SQLite ou agenda publicacao.")
     if input("Digite INSPECIONAR CAMPOS: ").strip() != "INSPECIONAR CAMPOS":
         print("[CANCELADO] Inspecao nao iniciada.")
@@ -410,7 +421,12 @@ async def inspect_existing_composer() -> None:
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 bridge = ChromeMCP(session)
-                page_id = await bridge.meta_page(create_if_missing=False)
+                page_id = await bridge.meta_page(create_if_missing=True)
+                print("[INSPECAO] Na aba Meta, selecione @aray_solucoes, abra")
+                print("'Criar publicacao' e deixe Data e Horario visiveis.")
+                if input("Quando o compositor estiver pronto, digite PRONTO: ").strip() != "PRONTO":
+                    print("[CANCELADO] Nenhuma alteracao feita.")
+                    return
                 await bridge.assert_meta_page(page_id)
                 fields = discover_fields(await bridge.call("take_snapshot", pageId=page_id))
                 for name, found in field_report(fields).items():
