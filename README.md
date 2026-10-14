@@ -827,3 +827,39 @@ de iniciar `--date ... --post ... --start --browser existing`.
 
 Se a data e o horario nao forem encontrados em conjunto, o fluxo
 assistido nao altera nenhum dos dois e exige preenchimento manual.
+
+
+### Correcao da inspecao quando nao ha aba Business Suite (Chrome MCP)
+
+Se `python business_suite_assistant.py --inspect-composer` conectar ao
+Chrome e mostrar `nenhuma aba Business Suite encontrada`, isso NAO
+significa falha do WebSocket. O processo MCP esta acessivel, mas o
+navegador nao apresenta uma aba com o hostname exato
+`business.facebook.com`.
+
+**Antes de executar a inspecao:** abra MANUALMENTE
+https://business.facebook.com/ no Chrome pessoal, faca login se
+necessario, aguarde terminar os redirecionamentos e abra a tela
+**Criar publicacao**. Depois execute:
+
+```powershell
+python business_suite_assistant.py --inspect-composer
+```
+
+A inspecao nao cria mais abas: se a Meta nao estiver aberta, mostra
+uma orientacao sem navegar no Chrome. O agendamento assistido normal
+continua podendo abrir uma unica aba e aguardar seu carregamento.
+
+Nos exemplos anteriores, `AAAA-MM-DD` e `ARAY-AAAAMMDD-NNN` sao
+**marcadores explicativos**, nao parametros validos. Use data em
+`AAAA-MM-DD` e ID real do Google Sheets. Por exemplo, para o post
+existente aprovado `ARAY-20261014-007` (19h de 14/10/2026), execute
+SOMENTE enquanto esse horario ainda estiver no futuro:
+
+```powershell
+python business_suite_assistant.py --date 2026-10-14 --post ARAY-20261014-007 --start --browser existing
+```
+
+Nao agende sem antes revisar legenda, ordem dos slides, conta,
+data, hora, fuso e confirmacao manual no Planejador. Mantenha a tarefa
+antiga Graph API desligada.
