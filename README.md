@@ -365,7 +365,6 @@ Somente depois marca como confirmado no terminal. O status no SQLite e
 ```powershell
 git pull origin main
 python -m pip install -r requirements.txt
-python -m playwright install chromium
 python -m unittest test_arayflow test_r2 test_sync test_scheduler test_business_suite -v
 ```
 
@@ -381,7 +380,7 @@ python dashboard.py
 Acesse **http://127.0.0.1:8766**. Depois de desativar a API no `.env`
 e pausar `ArayFlow Publisher`, escolha a data e clique em
 **Abrir assistente do Business Suite**. O Flask abre uma janela de console
-Windows interativa, que inicia o Chromium e faz as perguntas de confirmacao.
+Windows interativa, que inicia o Google Chrome instalado e faz as perguntas de confirmacao.
 O botao nao funciona se a publicacao automatica por API ainda estiver ativa.
 Reinicie o Flask depois de mudar o `.env` para que a configuracao seja relida.
 
@@ -424,7 +423,7 @@ Iniciar sessao VISIVEL do Playwright (iterar os posts aprovados em ordem de hora
 python business_suite_assistant.py --date 2026-10-14 --start
 ```
 
-No primeiro uso, um navegador Chromium isolado sera aberto. Entre na conta
+No primeiro uso, o Google Chrome instalado sera aberto com perfil exclusivo. Entre na conta
 Meta **manualmente** e conclua qualquer verificacao em duas etapas.
 Quando estiver no criador de publicacao do Business Suite com Instagram
 `@aray_solucoes` selecionado, responda `PRONTO` no PowerShell.
@@ -462,7 +461,7 @@ python business_suite_assistant.py --confirm ARAY-20261014-002
 
 ### Seguranca e persistencia
 
-- Perfil/cookies do Chromium em `data/playwright_meta_profile/`, fora do GitHub;
+- Perfil/cookies do Chrome em `data/playwright_chrome_profile/`, fora do GitHub;
   nao compartilhe essa pasta, pois ela pode conter uma sessao autenticada.
 - Banco SQLite `data/arayflow.sqlite3`: nova tabela `business_suite_schedule`
   com estados `awaiting_confirmation`, `needs_review` e `scheduled`.
@@ -476,3 +475,55 @@ python business_suite_assistant.py --confirm ARAY-20261014-002
   web porque nao e destinado a acesso externo.
 - Agendamentos apenas para horarios **futuros**; posts expirados nao sao agendados
   automaticamente.
+
+
+
+---
+
+## ArayFlow v0.7.1 — Google Chrome instalado e sessao persistente
+
+O assistente do Business Suite utiliza agora **o Google Chrome instalado no
+Windows**, em vez do Chromium distribuido pelo Playwright.
+
+- Motor: Playwright com `channel="chrome"` e navegador visivel.
+- Perfil EXCLUSIVO: `data/playwright_chrome_profile/`. Permanece salvo entre
+  execucoes, inclusive cookies, enquanto a Meta mantiver a sessao valida.
+- O Google Chrome pessoal pode continuar aberto. **Nao reaproveitamos** janelas
+  ja abertas nem os cookies do perfil pessoal `Default`; isso evita conflitos
+  com as restricoes atuais de depuracao remota do Chrome.
+- Na primeira execucao desse perfil exclusivo, faca login no Facebook/Meta
+  e conclua eventuais verificacoes em duas etapas manualmente.
+- O perfil anterior `data/playwright_meta_profile/` (Chromium da v0.7.0)
+  **nao e apagado nem copiado**; portanto, o novo Chrome pede login inicial.
+- Se o Chrome nao estiver instalado, o script informa o erro. Instale o
+  Google Chrome normalmente no Windows. **Nao e necessario**
+  `python -m playwright install chromium` para este fluxo.
+- O painel Flask continua abrindo o assistente pelo botao e por PowerShell;
+  nenhuma modificacao nos controles anti-duplicidade, na planilha ou na API Meta.
+
+Atualizacao e testes (PowerShell com `.venv` ativo):
+
+```powershell
+git pull origin main
+python -m pip install -r requirements.txt
+python -m unittest test_arayflow test_r2 test_sync test_scheduler test_business_suite -v
+```
+
+Para usar com um unico post futuro aprovado, com o agendador Meta API desativado:
+
+```powershell
+python business_suite_assistant.py --date AAAA-MM-DD --post ARAY-AAAAMMDD-NNN --start
+```
+
+Ou abra o painel:
+
+```powershell
+python dashboard.py
+```
+
+Painel local: http://127.0.0.1:8766
+
+**IMPORTANTE:** dados do perfil Chrome sao sensiveis e permanecem somente
+no computador. Nao compartilhe `data/playwright_chrome_profile/`.
+O assistente ainda exige que voce confira e confirme manualmente a
+programacao no Planejador do Meta Business Suite.
