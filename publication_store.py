@@ -48,13 +48,27 @@ class PublicationStore:
     def claim(self, post_id: str) -> bool:
         """Reserva atomicamente um post nunca processado; bloqueia repeticoes."""
         now = datetime.now(timezone.utc).isoformat()
-        cur = self.conn.execute(
-            """INSERT OR IGNORE INTO publications
-               (post_id,status,media_id,container_id,updated_at)
-               VALUES(?,'preparing',NULL,NULL,?)""", (post_id, now)
-        )
-        self.conn.commit()
-        return cur.rowcount == 1
+        self.conn.execute("BEGIN IMMEDIATE")
+        try:
+            # Impede colisao com posts preparados no Business Suite.
+            table = self.conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='business_suite_schedule'"
+            ).fetchone()
+            if table and self.conn.execute(
+                "SELECT 1 FROM business_suite_schedule WHERE post_id=?", (post_id,)
+            ).fetchone():
+                self.conn.rollback()
+                return False
+            cur = self.conn.execute(
+                """INSERT OR IGNORE INTO publications
+                   (post_id,status,media_id,container_id,updated_at)
+                   VALUES(?,'preparing',NULL,NULL,?)""", (post_id, now)
+            )
+            self.conn.commit()
+            return cur.rowcount == 1
+        except Exception:
+            self.conn.rollback()
+            raise
 
     def transition(self, post_id: str, expected: str, target: str,
                    *, media_id=None, container_id=None) -> bool:
