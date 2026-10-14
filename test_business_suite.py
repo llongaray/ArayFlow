@@ -223,6 +223,78 @@ class MetaSuiteTests(unittest.TestCase):
             self.assertEqual(posted.status_code, 302)
             popen.assert_called_once()
 
+    def test_business_suite_null_origin_from_same_origin_chrome(self):
+        """Regressao: Chrome envia Origin=null, mas Sec-Fetch-Site=same-origin."""
+        import os
+        py = self.root / ".venv" / "Scripts" / "python.exe"
+        py.parent.mkdir(parents=True, exist_ok=True)
+        py.write_text("", encoding="utf-8")
+        (self.root / "business_suite_assistant.py").write_text("", encoding="utf-8")
+        app = create_app(root=self.root)
+        app.config["TESTING"] = True
+        with (
+            patch.dict(os.environ, {"ARAYFLOW_AUTOPUBLISH_ENABLED": "false"}),
+            patch("dashboard.get_calendar", return_value=[]),
+            patch("dashboard.task_state", return_value="Disabled"),
+            patch("dashboard.sys.platform", "win32"),
+            patch("dashboard.subprocess.CREATE_NEW_CONSOLE", 16, create=True),
+            patch("dashboard.subprocess.Popen") as popen,
+        ):
+            page = app.test_client().get(
+                "/?date=2026-10-14", headers={"Host": "127.0.0.1:8766"}
+            )
+            self.assertEqual(page.status_code, 200)
+            self.assertEqual(page.headers["Referrer-Policy"], "same-origin")
+            token = re.search(
+                r'<form[^>]+action="/business-suite/start"[^>]*>.*?'
+                r'<input[^>]+name="csrf"[^>]+value="([^"]+)"',
+                page.get_data(as_text=True), re.S,
+            )
+            self.assertIsNotNone(token)
+            accepted = app.test_client().post(
+                "/business-suite/start",
+                data={"csrf": token.group(1), "confirmation": "ABRIR",
+                      "date": "2026-10-14"},
+                headers={
+                    "Host": "127.0.0.1:8766", "Origin": "null",
+                    "Sec-Fetch-Site": "same-origin",
+                },
+            )
+            self.assertEqual(accepted.status_code, 302)
+            popen.assert_called_once()
+
+    def test_business_suite_null_origin_from_cross_site_is_blocked(self):
+        import os
+        app = create_app(root=self.root)
+        app.config["TESTING"] = True
+        with (
+            patch.dict(os.environ, {"ARAYFLOW_AUTOPUBLISH_ENABLED": "false"}),
+            patch("dashboard.get_calendar", return_value=[]),
+            patch("dashboard.task_state", return_value="Disabled"),
+            patch("dashboard.subprocess.Popen") as popen,
+        ):
+            page = app.test_client().get(
+                "/?date=2026-10-14", headers={"Host": "127.0.0.1:8766"}
+            )
+            token = re.search(
+                r'<form[^>]+action="/business-suite/start"[^>]*>.*?'
+                r'<input[^>]+name="csrf"[^>]+value="([^"]+)"',
+                page.get_data(as_text=True), re.S,
+            )
+            self.assertIsNotNone(token)
+            for fetch_site in ("cross-site", "", "same-site", "none"):
+                rejected = app.test_client().post(
+                    "/business-suite/start",
+                    data={"csrf": token.group(1), "confirmation": "ABRIR",
+                          "date": "2026-10-14"},
+                    headers={
+                        "Host": "127.0.0.1:8766", "Origin": "null",
+                        "Sec-Fetch-Site": fetch_site,
+                    },
+                )
+                self.assertEqual(rejected.status_code, 403)
+            popen.assert_not_called()
+
     def test_dashboard_start_requires_csrf(self):
         app = create_app(root=self.root)
         app.config["TESTING"] = True
