@@ -100,7 +100,7 @@ class SyncStore:
             return set()
         rows = self.conn.execute(
             """SELECT post_id FROM publications
-               WHERE status IN ('prepared','publishing','uncertain')
+               WHERE status IN ('preparing','prepared','publishing','uncertain')
                   OR (status='failed' AND container_id IS NOT NULL)"""
         ).fetchall()
         return {row[0] for row in rows}
