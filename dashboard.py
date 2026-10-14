@@ -191,7 +191,20 @@ def create_app(root: Path | None = None) -> Flask:
         # entre localhost e 127.0.0.1 nao devem bloquear formularios legitimos.
         # O token assinado acima continua obrigatorio para todas as acoes.
         local_origins = {"http://127.0.0.1:8766", "http://localhost:8766"}
-        if origin and origin not in local_origins:
+        if origin == "null":
+            # Com alguns ajustes de privacidade o Chrome envia Origin: null
+            # ate em formularios abertos em 127.0.0.1. Permitimos APENAS
+            # quando o proprio navegador informa navegacao same-origin.
+            # O token assinado por acao continua obrigatorio acima.
+            fetch_site = request.headers.get("Sec-Fetch-Site", "")
+            if fetch_site != "same-origin":
+                app.logger.warning(
+                    "Acao %s negada: Origin=null, Sec-Fetch-Site=%r; "
+                    "e necessaria navegacao de mesma origem",
+                    action, fetch_site[:80],
+                )
+                abort(403, description="A requisicao nao foi identificada como uma navegacao local segura.")
+        elif origin and origin not in local_origins:
             app.logger.warning(
                 "Acao %s negada: Origin=%r Host=%r; somente origem local permitida",
                 action, origin[:160], request.host[:160],
@@ -210,7 +223,7 @@ def create_app(root: Path | None = None) -> Flask:
     def security_headers(response):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
-        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Referrer-Policy"] = "same-origin"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; script-src 'self'; style-src 'self'; "
             "img-src 'self' data:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
