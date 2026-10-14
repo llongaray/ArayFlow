@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0b1833">
+  <title>ArayFlow — Central editorial</title>
+  <link rel="stylesheet" href="{{ url_for('static',filename='dashboard.css') }}">
+  <script defer src="{{ url_for('static',filename='dashboard.js') }}"></script>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <a class="identity" href="{{ url_for('dashboard') }}">
+      <div class="logo">A<span>✦</span></div>
+      <div class="identity-copy"><strong>ARAY<span>FLOW</span></strong><small>Central de publicações</small></div>
+    </a>
+    <div class="side-label">ESPAÇO DE TRABALHO</div>
+    <nav class="side-links" aria-label="Navegação">
+      <a class="active" href="#overview">▦ <span>Visão geral</span></a>
+      <a href="#calendario">▤ <span>Calendário editorial</span></a>
+      <a href="#business-suite">◈ <span>Meta Business Suite</span></a>
+      <a href="#servicos">◷ <span>Monitoramento</span></a>
+      <a href="#historico">≡ <span>Histórico e logs</span></a>
+    </nav>
+    <div class="side-label tools-label">ACESSO RÁPIDO</div>
+    <nav class="side-links">
+      <a href="{{ spreadsheet_url }}" target="_blank" rel="noopener noreferrer">↗ <span>Google Sheets</span></a>
+      <a href="https://business.facebook.com/" target="_blank" rel="noopener noreferrer">↗ <span>Business Suite</span></a>
+      <a href="https://github.com/llongaray/ArayFlow" target="_blank" rel="noopener noreferrer">↗ <span>Repositório</span></a>
+    </nav>
+    <div class="sidebar-footer"><span class="online-dot"></span> Painel local <small>v0.7.0</small></div>
+  </aside>
+
+  <main class="main">
+    <header class="top">
+      <div class="breadcrumb">ArayFlow <span>/</span> Painel</div>
+      <div class="profile"><span>AMERICA/SAO_PAULO</span><b>A</b></div>
+    </header>
+    <div class="content">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category,message in messages %}
+        <div class="notification {{ 'error' if category=='error' else 'success' }}" role="status">{{ message }}</div>
+        {% endfor %}
+      {% endwith %}
+      {% if google_error %}<div class="notification error">{{ google_error }}</div>{% endif %}
+
+      <section id="overview" class="hero">
+        <div><div class="eyebrow"><i></i> SEU CENTRO DE CONTROLE</div>
+          <h1>Publicações sob <em>controle.</em></h1>
+          <p>Planeje, revise e acompanhe seu Instagram com Google Sheets, Meta Business Suite e automação local.</p>
+        </div>
+        <a class="button primary" href="{{ url_for('dashboard',date=day,refresh=1) }}">↻ Atualizar dados</a>
+      </section>
+      <div class="metrics">
+        <article class="metric"><div class="metric-header">PUBLICAÇÕES <span class="metric-icon blue">▤</span></div><strong>{{ posts|length }}</strong><small>Para {{ day[8:10] }}/{{ day[5:7] }}/{{ day[:4] }}</small></article>
+        <article class="metric"><div class="metric-header">APROVADAS <span class="metric-icon gold">✦</span></div><strong>{{ approved }}</strong><small>Prontas para programação</small></article>
+        <article class="metric"><div class="metric-header">SUITE AGENDADOS <span class="metric-icon violet">◈</span></div><strong>{{ suite_scheduled }}</strong><small>Confirmados pelo operador</small></article>
+        <article class="metric"><div class="metric-header">META PUBLICADOS <span class="metric-icon green">✓</span></div><strong>{{ published }}</strong><small>Confirmados pela Graph API</small></article>
+      </div>
+
+      <section class="section" id="calendario">
+        <div class="heading">
+          <div><div class="overline">CONTEÚDO</div><h2>Calendário editorial</h2></div>
+          <div class="date-tools">
+            <a href="{{ url_for('dashboard',date=previous_day) }}" class="date-arrow" title="Dia anterior">‹</a>
+            <form method="get" action="{{ url_for('dashboard') }}"><label for="day-picker" class="sr-only">Data</label><input id="day-picker" name="date" type="date" value="{{ day }}" required><button type="submit">Ver</button></form>
+            <a href="{{ url_for('dashboard',date=next_day) }}" class="date-arrow" title="Próximo dia">›</a>
+            <a href="{{ url_for('dashboard',date=today) }}" class="today">Hoje</a>
+          </div>
+        </div>
+        <div class="panel calendar-panel">
+          <div class="table-controls">
+            <label class="search"><span>⌕</span><input type="search" id="post-search" placeholder="Buscar por ID, tipo ou legenda…" aria-label="Buscar posts"></label>
+            <select id="post-filter" aria-label="Filtrar status"><option value="all">Todos os status</option><option value="approved">Aprovados</option><option value="review">Em revisão</option><option value="suite">Agendados no Suite</option><option value="published">Publicados pela API</option></select>
+            <span class="counter"><span id="visible-count">{{ posts|length }}</span> registros</span>
+          </div>
+          <div class="table-responsive">
+            <table><thead><tr><th>PUBLICAÇÃO</th><th>HORÁRIO</th><th>EDITORIAL</th><th>META API</th><th>BUSINESS SUITE</th><th>IMAGENS</th><th></th></tr></thead>
+            <tbody>
+              {% for p in posts %}
+              <tr class="post-row" data-text="{{ (p.id ~ ' ' ~ p.kind ~ ' ' ~ p.caption[:100])|lower }}" data-approved="{{ 'yes' if p.approved else 'no' }}" data-meta="{{ p.publication_status }}" data-suite="{{ p.suite_status }}">
+                <td><div class="post-heading">
+                  {% if p.has_cover %}<img src="{{ url_for('media',post_id=p.id,slide=1) }}" alt="Capa de {{ p.id }}" loading="lazy">{% else %}<span class="no-image">▧</span>{% endif %}
+                  <div><b>{{ p.id }}</b><small>{{ p.kind or 'Publicação' }}</small></div>
+                </div></td>
+                <td><strong class="time">{{ p.time }}</strong></td>
+                <td><span class="pill {{ 'approved' if p.approved else 'review' }}">{{ p.status or 'Pendente' }}</span></td>
+                <td><span class="pill {{ 'published' if p.publication_status=='published' else 'prepared' if p.publication_status=='prepared' else 'warning' if p.publication_status in ['preparing','publishing','uncertain','failed'] else 'neutral' }}">{{ p.publication_status|replace('_',' ') }}</span></td>
+                <td><span class="pill {{ 'scheduled' if p.suite_status=='scheduled' else 'warning' if p.suite_status in ['awaiting_confirmation','needs_review'] else 'neutral' }}">{{ p.suite_status|replace('_',' ') }}</span></td>
+                <td><span class="count">{{ p.local_count }} <small>/ {{ p.expected or '?' }}</small></span></td>
+                <td><a class="detail-link" href="{{ url_for('dashboard',date=day,post=p.id) }}#post-detail">Detalhes →</a></td>
+              </tr>
+              {% else %}
+              <tr><td colspan="7" class="empty">Nenhuma publicação para o dia selecionado.</td></tr>
+              {% endfor %}
+              <tr class="filter-empty" hidden><td colspan="7" class="empty">Nenhum resultado para os filtros.</td></tr>
+            </tbody></table>
+          </div>
+          <footer class="panel-footer">Google Sheets · leitura apenas <span>Atualização manual ou cache de 45s</span></footer>
+        </div>
+      </section>
+
+      {% if selected_post %}
+      <section class="section" id="post-detail">
+        <div class="heading"><div><div class="overline">PRÉVIA</div><h2>{{ selected_post.id }}</h2></div><a class="subtle-link" href="{{ url_for('dashboard',date=day) }}#calendario">Fechar ✕</a></div>
+        <div class="detail-layout">
+          <div class="panel preview-panel">
+            <div class="panel-title">Artes locais <small>{{ slides|length }} slide(s)</small></div>
+            {% if slides %}<div class="slides">{% for n in slides %}<a href="{{ url_for('media',post_id=selected_post.id,slide=n) }}" target="_blank" rel="noopener"><img loading="lazy" src="{{ url_for('media',post_id=selected_post.id,slide=n) }}" alt="Slide {{ n }}"><span>Slide {{ n }} ↗</span></a>{% endfor %}</div>{% else %}<p>Imagens ainda não baixadas.</p>{% endif %}
+          </div>
+          <div class="panel caption-panel">
+            <div class="panel-title">Legenda <button type="button" class="copy-button" data-copy-target="caption-data">Copiar</button></div>
+            <pre id="caption-data">{{ selected_post.caption or 'Sem legenda.' }}</pre>
+            <dl>
+              <div><dt>Horário</dt><dd>{{ selected_post.time }} (Brasília)</dd></div>
+              <div><dt>Situação</dt><dd>{{ selected_post.stage }}</dd></div>
+              <div><dt>Business Suite</dt><dd>{{ selected_post.suite_status }}</dd></div>
+              <div><dt>ID do contêiner API</dt><dd>{{ selected_post.container_id or '—' }}</dd></div>
+              <div><dt>Media ID</dt><dd>{{ selected_post.media_id or '—' }}</dd></div>
+            </dl>
+          </div>
+        </div>
+      </section>
+      {% endif %}
+
+      <section class="section" id="business-suite">
+        <div class="heading"><div><div class="overline">v0.7.0 · PLAYWRIGHT</div><h2>Assistente Business Suite</h2></div><span class="tag">Navegador visível</span></div>
+        <div class="suite-layout">
+          <div class="panel suite-primary">
+            <div class="suite-badge">FLUXO ASSISTIDO</div>
+            <h3>Agende o dia inteiro em uma sessão.</h3>
+            <p>O navegador abre sua conta Meta, tenta preencher artes e legendas e apresenta cada post. Você confere o horário e clica em <strong>Agendar</strong> no Business Suite. O sistema só registra a confirmação após sua validação.</p>
+            {% if autopublish %}<div class="notification error">A automação pela Graph API está AUTORIZADA no .env. Antes de usar o assistente Playwright, altere <code>ARAYFLOW_AUTOPUBLISH_ENABLED=false</code> e pause a tarefa Windows para evitar duplicatas.</div>{% endif %}
+            <div class="cli"><code id="suite-command">python business_suite_assistant.py --date {{ day }} --start</code><button type="button" class="copy-button" data-copy-target="suite-command">Copiar comando</button></div>
+            <div class="cli secondary-cli"><code id="suite-status-command">python business_suite_assistant.py --status</code><button type="button" class="copy-button" data-copy-target="suite-status-command">Copiar</button></div>
+            <p class="support-note">Execute o comando no PowerShell com o <code>.venv</code> ativo. O assistente não clica no botão final nem tenta contornar autenticação. Não precisa deixar o computador ligado após confirmar os posts no Business Suite.</p>
+          </div>
+          <div class="panel suite-steps">
+            <h3>Como funciona</h3>
+            <ol>
+              <li><b>Revisão</b><span>Aprove os posts no Google Sheets.</span></li>
+              <li><b>Login</b><span>Entre na Meta pelo Chromium isolado.</span></li>
+              <li><b>Preenchimento</b><span>Confira Instagram, artes e legendas.</span></li>
+              <li><b>Agendamento</b><span>Selecione data e hora e clique em Agendar.</span></li>
+              <li><b>Confirmação</b><span>Verifique no Planejador e registre no terminal.</span></li>
+            </ol>
+            <div class="suite-summary"><strong>{{ suite_scheduled }}</strong> agendado(s) · <strong>{{ suite_pending }}</strong> pendente(s) de revisão</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="servicos">
+        <div class="heading"><div><div class="overline">OPERAÇÃO</div><h2>Monitoramento</h2></div></div>
+        <div class="monitor-layout">
+          <div class="panel services">
+            <div class="service"><span class="service-symbol">◷</span><div><b>Agendador Windows</b><small>ArayFlow Publisher</small></div><span class="pill neutral">{{ task_state }}</span></div>
+            <div class="service"><span class="service-symbol">◎</span><div><b>Publicador Graph API</b><small>Chave local de autorização</small></div><span class="pill {{ 'approved' if autopublish else 'neutral' }}">{{ 'AUTORIZADO' if autopublish else 'DESATIVADO' }}</span></div>
+            <div class="service"><span class="service-symbol">☁</span><div><b>Cloudflare R2</b><small>{{ db.asset_count }} imagens catalogadas no SQLite</small></div><span class="pill neutral">{{ remote_count if remote_count is not none else 'Não consultado' }}</span></div>
+            {% if r2_error %}<div class="notification error">{{ r2_error }}</div>{% endif %}
+            <a class="button outline" href="{{ url_for('dashboard',date=day,r2=1) }}#servicos">Consultar objetos do R2</a>
+            {% if task_state in ['Ready','Running','Queued'] %}
+            <form action="{{ url_for('scheduler_action',action='pause') }}" method="post" class="task-form">
+              <label for="confirm-pause">Pausar tarefa (digite PAUSAR)</label><input id="confirm-pause" type="text" name="confirmation" placeholder="PAUSAR" required autocomplete="off"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="button danger" type="submit">Pausar tarefa</button>
+            </form>
+            {% elif task_state == 'Disabled' %}
+            <form action="{{ url_for('scheduler_action',action='resume') }}" method="post" class="task-form">
+              <label for="confirm-resume">Retomar tarefa (digite RETOMAR)</label><input id="confirm-resume" type="text" name="confirmation" placeholder="RETOMAR" required autocomplete="off"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="button primary" type="submit">Retomar tarefa</button>
+            </form>
+            {% endif %}
+            <p class="note">Pausar não interrompe uma publicação que já esteja em andamento.</p>
+          </div>
+          <div class="panel history" id="historico">
+            <div class="panel-title">Histórico de sincronização</div>
+            {% for s in db.sessions %}<div class="history-line"><span class="history-dot"></span><div><b>{{ s.day }}</b><small>{{ s.updated_at[:19]|replace('T',' ') }} UTC</small></div><span class="pill {{ 'approved' if s.status=='complete' else 'warning' }}">{{ s.status }}</span></div>
+            {% else %}<p class="empty">Nenhuma sessão registrada.</p>{% endfor %}
+          </div>
+        </div>
+      </section>
+      <section class="section logs-section">
+        <div class="heading"><div><div class="overline">AUDITORIA</div><h2>Logs de execução</h2></div><span class="muted">Últimas 24 linhas</span></div>
+        <div class="panel logs"><pre>{% for line in logs %}{{ line }}
+{% else %}Nenhum evento recente. O painel Flask não executa publicações diretamente.
+{% endfor %}</pre></div>
+      </section>
+      <footer class="footer">ARAY SOLUÇÕES · ArayFlow v0.7.0 · Interface local sem acesso público</footer>
+    </div>
+  </main>
+</div>
+</body>
+</html>
