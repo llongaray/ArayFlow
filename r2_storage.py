@@ -62,7 +62,7 @@ class R2Storage:
         except ValueError:
             return False
         return day == parsed_day and bool(re.fullmatch(
-            re.escape(post_id) + r"_slide-\\d+\\.(png|jpg|jpeg)", filename, re.I
+            re.escape(post_id) + r"_slide-\d+\.(png|jpg|jpeg)", filename, re.I
         ))
 
     def list_managed(self) -> list[str]:
