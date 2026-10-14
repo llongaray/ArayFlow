@@ -20,6 +20,9 @@ from publication_store import PublicationStore
 from arayflow.editorial import scheduled_time
 from arayflow.local_media import ensure_local
 from arayflow.settings import ZONE
+from business_suite_forms import (
+    discover_fields, plan_form_values, validate_media_files,
+)
 
 META_URL = "https://business.facebook.com/"
 PAGE_PATTERN = re.compile(r"(?m)^\s*(?:[-*]\s*)?(\d+):\s+(https?://\S+)")
@@ -216,35 +219,74 @@ class ChromeMCP:
         await self.call("select_page", pageId=page_id, bringToFront=True)
         return page_id
 
-    async def prefill(self, page_id: int, paths: list[Path], caption: str) -> dict[str, bool]:
-        """Preenche controles identificados com seguranca; NUNCA clica em Agendar."""
+    async def prefill(self, page_id: int, paths: list[Path], caption: str,
+                      when: datetime | None = None) -> dict[str, bool]:
+        """Preenche campos identificados; nunca envia o formulario final da Meta.
+
+        O operador abre previamente o compositor E as opcoes de agendamento.
+        Se data e hora nao forem ambas identificadas, nenhuma delas e alterada.
+        Os indicadores mostram aceite do MCP, nao comprovacao do agendamento.
+        """
         outcome = {"images": False, "caption": False}
-        # O snapshot pode conter conteudo de terceiros. Usamos apenas UIDs
-        # e rotulos limitados: nao executamos instrucoes de texto da pagina.
-        try:
-            snap = await self.call("take_snapshot", pageId=page_id)
-            uid = unique_uid(
-                snap, UPLOAD_TERMS, re.compile(r"button|input|file|upload", re.I)
-            )
-            if uid:
-                await self.call("upload_file", pageId=page_id, uid=uid,
-                                filePaths=[str(p.resolve()) for p in paths],
-                                includeSnapshot=False)
+        if when is not None:
+            outcome.update(date=False, time=False)
+            if when <= datetime.now(ZONE):
+                raise ValueError("Data/hora de agendamento ja passou")
+        # Verifica a aba ANTES de interagir, caso o operador a tenha mudado.
+        await self.assert_meta_page(page_id)
+        snapshot = await self.call("take_snapshot", pageId=page_id)
+        fields = discover_fields(snapshot)
+        if fields.ambiguous:
+            print("[AVISO] Campos ambiguos, exigem preenchimento manual: "
+                  + ", ".join(fields.ambiguous))
+        if fields.upload_uid:
+            try:
+                files = validate_media_files(paths)
+                await self.call("upload_file", pageId=page_id, uid=fields.upload_uid,
+                                filePaths=files, includeSnapshot=False)
                 outcome["images"] = True
-        except Exception:
-            print("[AVISO] Upload nao identificado/aceito com seguranca; anexe os arquivos manualmente.")
-        try:
-            snap = await self.call("take_snapshot", pageId=page_id)
-            uid = unique_uid(
-                snap, CAPTION_TERMS, re.compile(r"textbox|textarea|editable", re.I)
-            )
-            if uid:
-                await self.call("fill", pageId=page_id, uid=uid, value=caption,
+            except Exception:
+                print("[AVISO] Upload nao confirmado; confira anexos e insira manualmente se necessario.")
+        else:
+            print("[MANUAL] Botao de imagens nao identificado no compositor.")
+        # O upload pode alterar o DOM; UIDs do snapshot anterior expirariam.
+        await self.assert_meta_page(page_id)
+        snapshot = await self.call("take_snapshot", pageId=page_id)
+        fields = discover_fields(snapshot)
+        if fields.ambiguous:
+            print("[AVISO] Campos ambiguos na revisao: " + ", ".join(fields.ambiguous))
+        if when is None:
+            plan = plan_form_values(fields, caption, datetime.now(ZONE))
+            plan = [item for item in plan if item["uid"] == fields.caption_uid]
+        else:
+            plan = plan_form_values(fields, caption, when)
+        if not fields.caption_uid:
+            print("[MANUAL] Legenda sem campo inequivoco; cole diretamente no Business Suite.")
+        if when is not None and not (fields.date_uid and fields.time_uid):
+            print("[MANUAL] Data e horario nao identificados como par de campos. "
+                  "Abra as opcoes de Programar na Meta e preencha manualmente.")
+        if plan:
+            try:
+                await self.call("fill_form", pageId=page_id, elements=plan,
                                 includeSnapshot=False)
-                outcome["caption"] = True
-        except Exception:
-            print("[AVISO] Legenda nao preenchida automaticamente; cole no campo manualmente.")
+                outcome["caption"] = fields.caption_uid is not None
+                if when is not None and fields.date_uid and fields.time_uid:
+                    outcome["date"] = outcome["time"] = True
+            except Exception:
+                print("[AVISO] O formulario pode ter sido parcialmente alterado. "
+                      "Confira TODOS os campos manualmente antes de agendar.")
+        print("[REVISAO] MCP nao clicou em Publicar ou Agendar. "
+              "Data, horario, conta, imagens e legenda exigem verificacao visual.")
         return outcome
+
+    async def assert_meta_page(self, page_id: int) -> None:
+        """Recusa preencher se a aba foi navegada para outro dominio."""
+        listing = await self.call("list_pages")
+        if page_id not in parse_business_pages(listing):
+            raise RuntimeError(
+                "A aba selecionada nao esta mais no dominio business.facebook.com. "
+                "Nenhum campo sera preenchido."
+            )
 
 
 def connection_failure_details(error: BaseException) -> str:
@@ -379,7 +421,9 @@ async def schedule_existing_chrome(rows: list[dict], drive, ledger, db_file: Pat
                         images = ensure_local(row, drive)
                         print(f"\n{'='*64}\n{ident} | {due:%d/%m/%Y %H:%M} (America/Sao_Paulo)")
                         print(f"Artes: {len(images)} | Legenda: {len(row.get('Legenda pronta','').strip())} caracteres")
-                        print("Na ABA do Chrome existente, selecione @aray_solucoes e abra o compositor.")
+                        print("Na aba do Chrome, selecione @aray_solucoes, abra o compositor")
+                        print("e EXIBA as opcoes de PROGRAMAR com campos Data e Horario.")
+                        print("Nao clique no botao final Agendar ainda.")
                         if input("Quando o compositor estiver aberto, digite PRONTO (ou PULAR): ").strip() != "PRONTO":
                             print("[PARADO] Lote interrompido sem reservar o post.")
                             break
@@ -389,10 +433,18 @@ async def schedule_existing_chrome(rows: list[dict], drive, ledger, db_file: Pat
                             print(f"[PROTEGIDO] {ident}: sessao ja existente; nao repetir.")
                             break
                         try:
-                            filled = await bridge.prefill(page_id, images, row["Legenda pronta"].strip())
+                            filled = await bridge.prefill(
+                                page_id, images, row["Legenda pronta"].strip(), due
+                            )
                             print(
-                                f"Preenchimento: imagens={'OK' if filled['images'] else 'MANUAL'}, "
-                                f"legenda={'OK' if filled['caption'] else 'MANUAL'}."
+                                "Preenchimento MCP (revisar visualmente): "
+                                + ", ".join(
+                                    f"{label}={'ENVIADO' if filled.get(key) else 'MANUAL'}"
+                                    for key, label in (
+                                        ("images", "imagens"), ("caption", "legenda"),
+                                        ("date", "data"), ("time", "horario")
+                                    )
+                                )
                             )
                             print("Confira conta @aray_solucoes, ordem dos slides, legenda,")
                             print(f"data {due:%d/%m/%Y}, horario {due:%H:%M} e fuso na tela.")
