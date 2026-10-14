@@ -9,6 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch, AsyncMock
 
+from business_suite_dom_probe import READ_ONLY_SCHEDULE_JS, format_dom_probe
 from business_suite_forms import (
     discover_fields, plan_form_values, safe_composer_hints, safe_control_shapes,
     validate_media_files,
@@ -286,6 +287,61 @@ class ExistingChromeTests(unittest.TestCase):
         self.assertEqual(info["segments"]["minute"], ("spinbutton",))
         for hidden in ("outubro", "uid=", "4_2"):
             self.assertNotIn(hidden, str(info))
+
+    def test_dom_probe_only_outputs_allowlisted_metadata(self):
+        import json
+        reply = {
+            "probe": "arayflow-dom-v1",
+            "status": "ok",
+            "total": 2,
+            "controls": [
+                {
+                    "tag": "input", "role": "spinbutton", "input": "number",
+                    "label": "hour", "labelPresent": True,
+                    "range": "hour-24", "popup": "none",
+                    "readonly": False, "editable": False,
+                    "hiddenText": "legenda confidencial",
+                    "value": "16:55",
+                },
+                {
+                    "tag": "other", "role": "combobox", "input": "none",
+                    "label": "month", "labelPresent": False,
+                    "range": "unknown", "popup": "dialog",
+                    "readonly": True, "editable": False,
+                },
+            ],
+            "url": "https://business.facebook.com/private?token=SECRETO",
+        }
+        lines = format_dom_probe(
+            "Script ran on page and returned:\n" + json.dumps(reply)
+        )
+        self.assertEqual(len(lines), 3)
+        self.assertIn("Controles de formulario visiveis: 2", lines[0])
+        self.assertIn("role=spinbutton", lines[1])
+        self.assertIn("rotulo=month", lines[2])
+        for private in ("16:55", "confidencial", "SECRETO", "business.facebook.com"):
+            self.assertNotIn(private, "\n".join(lines))
+
+    def test_dom_probe_unknown_or_non_json_response_suppresses_payload(self):
+        self.assertEqual(
+            format_dom_probe("sensitive_string 123 and cookies"),
+            ["[DOM] Resposta do MCP nao interpretada; dados brutos descartados."],
+        )
+        import json
+        payload = {"probe": "arayflow-dom-v1", "status": "wrong-host",
+                   "controls": [], "total": 0,
+                   "private": "senha-de-usuario"}
+        output = "\n".join(format_dom_probe(json.dumps(payload)))
+        self.assertIn("inspecao DOM cancelada", output)
+        self.assertNotIn("senha-de-usuario", output)
+
+    def test_dom_probe_read_only_source_has_no_browser_side_effects(self):
+        self.assertIn("document.querySelectorAll", READ_ONLY_SCHEDULE_JS)
+        self.assertIn("location.hostname", READ_ONLY_SCHEDULE_JS)
+        for operation in (".click(", ".focus(", ".value =", "fetch(",
+                          "XMLHttpRequest", ".submit(", "localStorage",
+                          "document.cookie"):
+            self.assertNotIn(operation, READ_ONLY_SCHEDULE_JS)
 
     def test_existing_business_tab_is_reused_without_new_browser(self):
         fake = FakeSession(
