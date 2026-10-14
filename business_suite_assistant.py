@@ -229,14 +229,14 @@ def main() -> int:
             if not POST_RE.fullmatch(args.confirm):
                 parser.error("ID invalido")
             record = ledger.get(args.confirm)
-            if not record or record["status"] != "needs_review":
-                raise ValueError("Somente registros needs_review podem ser confirmados apos revisao")
+            if not record or record["status"] not in {"needs_review", "awaiting_confirmation"}:
+                raise ValueError("Somente agendamentos pendentes podem ser confirmados apos revisao")
             expected = f"AGENDADO {args.confirm}"
             print("Confirme visualmente que existe um agendamento no Planejador do Business Suite.")
             if input(f"Digite exatamente {expected}: ").strip() != expected:
                 print("Cancelado.")
                 return 1
-            ledger.update(args.confirm, "needs_review", "scheduled",
+            ledger.update(args.confirm, record["status"], "scheduled",
                           "Confirmacao manual posterior no Business Suite")
             print("[OK] Confirmacao manual salva no SQLite.")
             return 0
