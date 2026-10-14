@@ -66,8 +66,7 @@ _FILL_TEMPLATE = r"""async () => {
       !location.pathname.startsWith("/latest/composer")) return response("wrong-host");
   const body = document.body?.innerText || "";
   if (!body.includes("Definir data e hora") ||
-      !body.includes("Programar") ||
-      !body.includes("Adicionar foto/vídeo")) return response("not-scheduled");
+      !body.includes("Programar")) return response("not-scheduled");
 
   const visible = e => {
     const rect = e.getBoundingClientRect();
