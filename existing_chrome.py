@@ -95,7 +95,13 @@ class ChromeMCP:
         listing = await self.call("list_pages")
         options = parse_business_pages(listing)
         if len(options) > 1:
-            print(f"[AVISO] {len(options)} abas do Business Suite abertas; selecionando a primeira.")
+            print(f"[CHROME] Encontradas {len(options)} abas do Meta Business Suite.")
+            print("IDs disponiveis: " + ", ".join(str(option) for option in options))
+            selection = input("Digite o ID da aba correta (Enter para primeira): ").strip()
+            if selection:
+                if not selection.isascii() or not selection.isdecimal() or int(selection) not in options:
+                    raise ValueError("ID de aba invalido; nenhuma aba sera modificada")
+                options = [int(selection)]
         if not options:
             print("[INFO] Abrindo uma aba do Business Suite no Chrome pessoal ja aberto.")
             await self.call("new_page", url=META_URL, background=False)
