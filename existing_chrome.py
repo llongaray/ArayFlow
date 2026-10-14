@@ -344,8 +344,9 @@ class ChromeMCP:
             enabled = os.getenv("ARAYFLOW_SUITE_SCHEDULE_PREFILL", "false").strip().lower()
             if enabled in {"true", "1", "yes", "sim"}:
                 print(f"[EXPERIMENTAL] Data: {when:%d/%m/%Y}; horario: {when:%H:%M}.")
-                print("[EXPERIMENTAL] So prossegue se encontrar UM input de data,")
-                print("UMA hora (0-23) e UM minuto (0-59) no compositor da Meta.")
+                print("[EXPERIMENTAL] Liga 'Definir data e hora' se estiver desligado.")
+                print("[EXPERIMENTAL] So grava se houver UM campo de data e UM horario")
+                print("(hora e minuto separados, ou um unico campo HH:MM).")
                 confirmation = input(
                     "Autorizar a alteracao dos tres campos? "
                     "Digite PREENCHER DATA E HORA (ou Enter para manual): "
@@ -573,8 +574,9 @@ async def test_schedule_fields_in_existing_chrome(when: datetime) -> None:
     if when <= datetime.now(ZONE):
         raise ValueError("Data/hora para teste precisa estar no futuro")
     print("[TESTE] Apenas campos de data/hora; nenhuma planilha, imagem ou SQLite.")
-    print("[TESTE] Deixe o compositor aberto, @aray_solucoes selecionado")
-    print("e 'Definir data e hora' ligado, com os campos visiveis.")
+    print("[TESTE] Deixe o compositor aberto e @aray_solucoes selecionado.")
+    print("[TESTE] O teste liga 'Definir data e hora' e preenche data e hora:minuto.")
+    print("[TESTE] Nao clica em Programar nem em Publicar.")
     if input("Digite TESTAR CAMPOS para conectar: ").strip() != "TESTAR CAMPOS":
         print("[CANCELADO] Nenhum campo alterado.")
         return

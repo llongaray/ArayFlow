@@ -351,7 +351,11 @@ class ExistingChromeTests(unittest.TestCase):
         self.assertIn('"iso":', javascript)
         self.assertIn('location.hostname !== "business.facebook.com"', javascript)
         self.assertIn('role") === "spinbutton"', javascript)
-        for forbidden in (".click(", ".submit(", "fetch(", "XMLHttpRequest", "document.cookie", "localStorage"):
+        self.assertIn("definir data e hora", javascript)
+        self.assertEqual(javascript.count(".click("), 1)
+        self.assertIn("scheduleSwitch.click()", javascript)
+        self.assertIn("publicar|agendar|programar", javascript)
+        for forbidden in (".submit(", "fetch(", "XMLHttpRequest", "document.cookie", "localStorage"):
             self.assertNotIn(forbidden, javascript)
         with self.assertRaisesRegex(ValueError, "sem fuso"):
             schedule_fill_js(datetime(2030, 2, 1, 14))

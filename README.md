@@ -1018,9 +1018,9 @@ os eventos de formulario. **Isso nao garante que o backend da Meta
 tenha aceitado os valores**. Sempre confira visualmente antes de usar
 o botao final de programacao.
 
-Com o Chrome pessoal aberto no Meta, conta correta selecionada,
-compositor `/latest/composer` carregado e `Definir data e hora`
-ativado:
+Com o Chrome pessoal aberto no Meta, conta correta selecionada e
+compositor `/latest/composer` carregado. O teste liga
+`Definir data e hora` e preenche a data e a hora:minuto.
 
 ```powershell
 Clear-Host; git pull origin main; if ($LASTEXITCODE -eq 0) { python -m unittest test_existing_chrome test_business_suite -v; if ($LASTEXITCODE -eq 0) { python business_suite_assistant.py --test-schedule-fields --at 2026-10-15T17:00 } }
