@@ -158,16 +158,16 @@ def safe_composer_hints(snapshot: str) -> dict[str, object]:
     return {
         "add_media_button": any(_UPLOAD.fullmatch(label) for label in labels),
         "text_label": any(label.casefold() == "texto" for label in labels)
-            or any(re.search(r"(?i)^\\s*(?:[-*]\\s*)?(?:text: )?Texto\\s*$", line)
+            or any(re.search(r"(?i)^\s*(?:[-*]\s*)?(?:text: )?Texto\s*$", line)
                    for line in lines),
         "schedule_switch_present": any("definir data e hora" in line.casefold()
                                        for line in lines),
-        "textbox_controls": sum(bool(re.search(r"\\btextbox\\b", line))
-                                 and bool(re.search(r"\\buid=\\d+_\\d+\\b", line))
+        "textbox_controls": sum(bool(re.search(r"\btextbox\b", line))
+                                 and bool(re.search(r"\buid=\d+_\d+\b", line))
                                  for line in lines),
         "unlabelled_textboxes": sum(
-            bool(re.search(r"\\buid=\\d+_\\d+\\s+textbox\\b", line))
-            and not bool(re.search(r'\\btextbox\\s+"', line))
+            bool(re.search(r"\buid=\d+_\d+\s+textbox\b", line))
+            and not bool(re.search(r'\btextbox\s+"', line))
             for line in lines
         ),
     }
