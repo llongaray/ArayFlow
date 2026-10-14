@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import patch, AsyncMock
 
 from business_suite_dom_probe import READ_ONLY_SCHEDULE_JS, format_dom_probe
+from business_suite_schedule_fill import interpret_schedule_fill, schedule_fill_js
 from business_suite_forms import (
     discover_fields, plan_form_values, safe_composer_hints, safe_control_shapes,
     validate_media_files,
@@ -342,6 +343,76 @@ class ExistingChromeTests(unittest.TestCase):
                           "XMLHttpRequest", ".submit(", "localStorage",
                           "document.cookie"):
             self.assertNotIn(operation, READ_ONLY_SCHEDULE_JS)
+
+    def test_schedule_js_accepts_only_future_dates_and_never_clicks_submit(self):
+        future = datetime.now(ZoneInfo("America/Sao_Paulo")) + timedelta(days=3)
+        javascript = schedule_fill_js(future)
+        self.assertIn('"arayflow-schedule-v1"', javascript)
+        self.assertIn('"iso":', javascript)
+        self.assertIn('location.hostname !== "business.facebook.com"', javascript)
+        self.assertIn('role") === "spinbutton"', javascript)
+        for forbidden in (".click(", ".submit(", "fetch(", "XMLHttpRequest", "document.cookie", "localStorage"):
+            self.assertNotIn(forbidden, javascript)
+        with self.assertRaisesRegex(ValueError, "sem fuso"):
+            schedule_fill_js(datetime(2030, 2, 1, 14))
+        with self.assertRaisesRegex(ValueError, "passou"):
+            schedule_fill_js(datetime(2020, 1, 1, tzinfo=ZoneInfo("America/Sao_Paulo")))
+
+    def test_schedule_response_is_allowlisted_and_does_not_leak_cookie(self):
+        ok, label = interpret_schedule_fill(
+            'Script returned: {"marker":"arayflow-schedule-v1","status":"verified",'
+            '"cookie":"VERY_PRIVATE_COOKIE"}'
+        )
+        self.assertTrue(ok)
+        self.assertEqual(label, "verified")
+        ok, label = interpret_schedule_fill(
+            'Script returned: {"marker":"arayflow-schedule-v1","status":"rejected",'
+            '"date":"14 de outubro de 2026"}'
+        )
+        self.assertFalse(ok)
+        self.assertEqual(label, "rejected")
+        self.assertEqual(interpret_schedule_fill("malformed output"), (False, "unreadable"))
+
+    def test_schedule_prefill_optin_declined_never_executes_script(self):
+        snapshot = (
+            'uid=7_1 button "Adicionar foto/vídeo"\n'
+            'uid=7_2 textbox "Texto"\n'
+        )
+        fake = FakeSession("## Pages\n1: https://business.facebook.com/latest/composer",
+                           [snapshot, snapshot])
+        future = datetime.now(ZoneInfo("America/Sao_Paulo")) + timedelta(days=2)
+        with patch.dict(os.environ, {"ARAYFLOW_SUITE_SCHEDULE_PREFILL": "true"}), \
+             patch("builtins.input", return_value=""):
+            result = asyncio.run(ChromeMCP(fake).prefill(1, [], "Teste", future))
+        self.assertFalse(result["date"])
+        self.assertFalse(result["time"])
+        self.assertNotIn("evaluate_script", [name for name, _ in fake.calls])
+
+    def test_schedule_prefill_optin_and_confirmation_verifies_dom_but_not_post(self):
+        class ScheduledSession(FakeSession):
+            async def call_tool(self, name, arguments=None):
+                if name == "evaluate_script":
+                    self.calls.append((name, arguments))
+                    return reply('Script returned: {"marker":"arayflow-schedule-v1","status":"verified"}')
+                return await super().call_tool(name, arguments)
+
+        snapshot = (
+            'uid=7_1 button "Adicionar foto/vídeo"\n'
+            'uid=7_2 textbox "Texto"\n'
+        )
+        fake = ScheduledSession(
+            "## Pages\n1: https://business.facebook.com/latest/composer",
+            [snapshot, snapshot],
+        )
+        future = datetime.now(ZoneInfo("America/Sao_Paulo")) + timedelta(days=2)
+        with patch.dict(os.environ, {"ARAYFLOW_SUITE_SCHEDULE_PREFILL": "true"}), \
+             patch("builtins.input", return_value="PREENCHER DATA E HORA"):
+            flags = asyncio.run(ChromeMCP(fake).prefill(1, [], "Teste", future))
+        self.assertTrue(flags["date"])
+        self.assertTrue(flags["time"])
+        self.assertIn("evaluate_script", [name for name, _ in fake.calls])
+        self.assertNotIn("click", [name for name, _ in fake.calls])
+        self.assertNotIn("press_key", [name for name, _ in fake.calls])
 
     def test_existing_business_tab_is_reused_without_new_browser(self):
         fake = FakeSession(
