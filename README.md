@@ -803,3 +803,27 @@ precisa permanecer desativado.
 do Business Suite da sua conta; a estrutura acessivel pode variar.
 Os testes cobrem cenarios simulados de snapshot, nao substituem a
 primeira verificacao em tela.
+
+
+### Inspecao de campos sem modificar publicacoes
+
+Antes de tentar o primeiro preenchimento real, use o modo seguro:
+
+```powershell
+python business_suite_assistant.py --inspect-composer
+```
+
+No Chrome pessoal, deixe a tela **Criar publicacao** do Meta Business
+Suite aberta e as opcoes **Programar**, **Data** e **Horario** visiveis.
+Digite `INSPECIONAR CAMPOS` no terminal e autorize o Chrome. O resultado
+mostra apenas `images`, `caption`, `date` e `time`, cada qual como
+`IDENTIFICADO` ou `MANUAL`, sem imprimir legenda, senhas ou a arvore
+completa do navegador.
+
+Esta inspecao nao acessa Google Sheets, nao cria reserva no SQLite,
+nao envia arquivos, nao preenche formulario e nao executa o agendamento.
+Ela permite confirmar quais rotulos a interface Meta esta expondo antes
+de iniciar `--date ... --post ... --start --browser existing`.
+
+Se a data e o horario nao forem encontrados em conjunto, o fluxo
+assistido nao altera nenhum dos dois e exige preenchimento manual.
