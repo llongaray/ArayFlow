@@ -85,3 +85,15 @@ class PublicationStore:
         )
         self.conn.commit()
         return cur.rowcount == 1
+
+    def business_suite_reserved(self, post_id: str) -> bool:
+        """Detecta agendamento assistido antes de qualquer media_publish automatica."""
+        exists = self.conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='business_suite_schedule'"
+        ).fetchone()
+        if not exists:
+            return False
+        return self.conn.execute(
+            "SELECT 1 FROM business_suite_schedule WHERE post_id=?",
+            (post_id,)
+        ).fetchone() is not None
