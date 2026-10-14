@@ -53,6 +53,36 @@ class ExistingChromeTests(unittest.TestCase):
         )
         self.assertEqual(parse_business_pages(output), [2, 4])
 
+    def test_mcp_new_list_pages_title_before_url(self):
+        """Regressao Chrome DevTools MCP: ID: Titulo (URL) [selected]."""
+        output = (
+            '## Pages\n'
+            '0: ArayFlow GitHub (https://github.com/llongaray/ArayFlow)\n'
+            '3: Meta Business Suite (https://business.facebook.com/latest/home?business_id=123) [selected]\n'
+            '5: Other (https://business.facebook.com.evil.invalid/)\n'
+            '6: Login (https://www.facebook.com/login)\n'
+        )
+        self.assertEqual(parse_business_pages(output), [3])
+
+    def test_mcp_url_as_title_and_old_format_mixed(self):
+        output = (
+            '## Pages\n'
+            '1: business.facebook.com/latest/home (https://business.facebook.com/latest/home) [selected]\n'
+            '2: https://business.facebook.com/latest/planner\n'
+            '3: https://mail.google.com/\n'
+        )
+        self.assertEqual(parse_business_pages(output), [1, 2])
+
+    def test_mcp_title_form_reuses_meta_tab_without_opening_more(self):
+        fake = FakeSession(
+            '## Pages\n1: Google (https://google.com/)\n'
+            '2: Meta Business Suite (https://business.facebook.com/latest/home) [selected]'
+        )
+        page = asyncio.run(ChromeMCP(fake).meta_page())
+        self.assertEqual(page, 2)
+        self.assertNotIn("new_page", [tool for tool, _ in fake.calls])
+        self.assertIn(("select_page", {"pageId": 2, "bringToFront": True}), fake.calls)
+
     def test_existing_business_tab_is_reused_without_new_browser(self):
         fake = FakeSession(
             "## Pages\n1: https://google.com/\n"
