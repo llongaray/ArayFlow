@@ -1,5 +1,7 @@
 """Testes offline do Chrome pessoal (sem acesso ao Chrome ou credenciais)."""
 import asyncio
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import os
 import tempfile
 import unittest
@@ -7,6 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from business_suite_forms import (discover_fields, plan_form_values, validate_media_files)
 from existing_chrome import (
     ChromeMCP, chrome_connection_args, extract_text, parse_business_pages,
     server_command, unique_uid, CAPTION_TERMS, UPLOAD_TERMS,
@@ -87,7 +90,7 @@ class ExistingChromeTests(unittest.TestCase):
         self.assertNotIn("click", calls)
         self.assertNotIn("press_key", calls)
         self.assertIn("upload_file", calls)
-        self.assertIn("fill", calls)
+        self.assertIn("fill_form", calls)
 
     def test_ambiguous_controls_always_require_manual_review(self):
         fake = FakeSession(
@@ -101,6 +104,101 @@ class ExistingChromeTests(unittest.TestCase):
         self.assertEqual(result, {"images": False, "caption": False})
         self.assertNotIn("upload_file", [name for name, _ in fake.calls])
         self.assertNotIn("fill", [name for name, _ in fake.calls])
+
+    def test_schedule_date_time_and_caption_are_filled_together(self):
+        fields = (
+            'uid=5_1 textbox "Legenda" multiline\n'
+            'uid=5_2 textbox "Data da publicação"\n'
+            'uid=5_3 textbox "Horário da publicação"\n'
+            'uid=5_4 button "Agendar"'
+        )
+        fake = FakeSession(
+            "## Pages\n1: https://business.facebook.com/latest/composer", [fields, fields]
+        )
+        when = datetime.now(ZoneInfo("America/Sao_Paulo")) + timedelta(days=2)
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "slide.png"
+            path.write_bytes(b"PNG")
+            result = asyncio.run(ChromeMCP(fake).prefill(
+                1, [path], "Nova legenda com #hashtags", when,
+            ))
+        self.assertEqual(result, {
+            "images": False, "caption": True, "date": True, "time": True
+        })
+        form_calls = [args for name, args in fake.calls if name == "fill_form"]
+        self.assertEqual(len(form_calls), 1)
+        self.assertEqual(form_calls[0]["elements"], [
+            {"uid": "5_1", "value": "Nova legenda com #hashtags"},
+            {"uid": "5_2", "value": when.strftime("%d/%m/%Y")},
+            {"uid": "5_3", "value": when.strftime("%H:%M")},
+        ])
+        self.assertNotIn("click", [name for name, _ in fake.calls])
+
+    def test_missing_time_never_updates_date(self):
+        fields = (
+            'uid=4_1 textbox "Legenda"\n'
+            'uid=4_2 textbox "Data de agendamento"\n'
+            'uid=4_3 button "Agendar"'
+        )
+        fake = FakeSession(
+            "## Pages\n1: https://business.facebook.com/latest/composer", [fields, fields]
+        )
+        when = datetime.now(ZoneInfo("America/Sao_Paulo")) + timedelta(days=2)
+        result = asyncio.run(ChromeMCP(fake).prefill(1, [], "Legenda", when))
+        self.assertEqual(result["date"], False)
+        self.assertEqual(result["time"], False)
+        forms = [args["elements"] for name, args in fake.calls if name == "fill_form"]
+        self.assertEqual(forms, [[{"uid": "4_1", "value": "Legenda"}]])
+
+    def test_fails_closed_when_operator_navigates_to_another_site(self):
+        fake = FakeSession("## Pages\n1: https://mail.google.com/")
+        when = datetime.now(ZoneInfo("America/Sao_Paulo")) + timedelta(days=2)
+        with self.assertRaisesRegex(RuntimeError, "business.facebook.com"):
+            asyncio.run(ChromeMCP(fake).prefill(1, [], "Legenda", when))
+        names = [name for name, _ in fake.calls]
+        self.assertEqual(names, ["list_pages"])
+
+    def test_mapping_rejects_duplicate_accessibility_labels(self):
+        snapshot = (
+            'uid=2_1 textbox "Legenda"\n'
+            'uid=2_2 textbox "Legenda"\n'
+            'uid=2_3 textbox "Data"\n'
+            'uid=2_4 textbox "Data"\n'
+            'uid=2_5 textbox "Horário"\n'
+            'uid=2_6 button "Agendar"'
+        )
+        fields = discover_fields(snapshot)
+        self.assertIsNone(fields.caption_uid)
+        self.assertIsNone(fields.date_uid)
+        self.assertIsNone(fields.time_uid)
+        self.assertIn("legenda", fields.ambiguous)
+        self.assertIn("data", fields.ambiguous)
+
+    def test_submit_controls_never_selected_as_schedule_inputs(self):
+        snapshot = (
+            'uid=3_1 button "Agendar"\n'
+            'uid=3_2 button "Publicar"\n'
+            'uid=3_3 button "Programar publicação"'
+        )
+        fields = discover_fields(snapshot)
+        self.assertFalse(any((fields.date_uid, fields.time_uid,
+                              fields.caption_uid, fields.upload_uid)))
+
+    def test_date_fields_require_timezone(self):
+        fields = discover_fields(
+            'uid=1_1 textbox "Data"\nuid=1_2 textbox "Horário"'
+        )
+        with self.assertRaisesRegex(ValueError, "fuso"):
+            plan_form_values(fields, "Legenda", datetime(2027, 1, 1, 7, 0))
+
+    def test_media_validation_refuses_missing_and_wrong_extensions(self):
+        with self.assertRaises(ValueError):
+            validate_media_files([Path("missing_file.png")])
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "slide.txt"
+            path.write_text("nao e arte")
+            with self.assertRaises(ValueError):
+                validate_media_files([path])
 
     def test_invalid_tool_result_is_not_ignored(self):
         class Failure:
