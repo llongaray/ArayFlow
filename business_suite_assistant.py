@@ -252,11 +252,15 @@ def main() -> int:
     )
     parser.add_argument("--diagnose-chrome", action="store_true", help="Diagnostica conexao ao Chrome existente sem publicar ou ler Sheets")
     parser.add_argument("--inspect-composer", action="store_true", help="Detecta campos do compositor no Chrome existente sem alterar posts")
+    parser.add_argument("--test-schedule-fields", action="store_true", help="Testa apenas data e hora no compositor real, sem Google ou SQLite")
+    parser.add_argument("--at", metavar="AAAA-MM-DDTHH:MM", help="Data e hora local desejadas no teste")
     parser.add_argument("--status", action="store_true", help="Mostra registros SQLite sem acessar Meta")
     parser.add_argument("--confirm", metavar="ID", help="Confirma agendamento pendente apos verificar manualmente no Meta")
     args = parser.parse_args()
-    if args.diagnose_chrome and args.inspect_composer:
-        parser.error("Escolha somente uma opcao de diagnostico")
+    if sum([bool(args.diagnose_chrome), bool(args.inspect_composer), bool(args.test_schedule_fields)]) > 1:
+        parser.error("Escolha somente um modo de diagnostico")
+    if args.at and not args.test_schedule_fields:
+        parser.error("--at exige --test-schedule-fields")
     if args.diagnose_chrome:
         import asyncio
         from existing_chrome import diagnose_chrome_connection
@@ -266,6 +270,22 @@ def main() -> int:
         import asyncio
         from existing_chrome import inspect_existing_composer
         asyncio.run(inspect_existing_composer())
+        return 0
+    if args.test_schedule_fields:
+        if not args.at:
+            parser.error("Informe --at AAAA-MM-DDTHH:MM")
+        try:
+            requested = datetime.strptime(args.at, "%Y-%m-%dT%H:%M")
+            if requested.strftime("%Y-%m-%dT%H:%M") != args.at:
+                raise ValueError("Formato incorreto")
+            due = requested.replace(tzinfo=ZONE)
+        except ValueError as exc:
+            raise ValueError("Data/hora de teste invalida; use AAAA-MM-DDTHH:MM") from exc
+        if due <= datetime.now(ZONE):
+            raise ValueError("Data/hora do teste precisa estar no futuro")
+        import asyncio
+        from existing_chrome import test_schedule_fields_in_existing_chrome
+        asyncio.run(test_schedule_fields_in_existing_chrome(due))
         return 0
     ledger = BusinessSuiteStore(DB_FILE)
     try:
