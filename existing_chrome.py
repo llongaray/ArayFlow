@@ -21,7 +21,7 @@ from arayflow.editorial import scheduled_time
 from arayflow.local_media import ensure_local
 from arayflow.settings import ZONE
 from business_suite_forms import (
-    discover_fields, plan_form_values, validate_media_files,
+    discover_fields, field_report, plan_form_values, validate_media_files,
 )
 
 META_URL = "https://business.facebook.com/"
@@ -364,6 +364,41 @@ async def diagnose_chrome_connection() -> None:
             f"Causa identificada: {details}. "
             "Verifique Chrome 144+, chrome://inspect/#remote-debugging, "
             "autorizacao no Chrome, e conexoes MCP concorrentes."
+        ) from exc
+
+
+async def inspect_existing_composer() -> None:
+    """Diagnostico SOMENTE LEITURA: imprime presenca de campos, jamais conteudo."""
+    try:
+        from mcp import ClientSession, StdioServerParameters
+        from mcp.client.stdio import stdio_client
+    except ImportError as exc:
+        raise RuntimeError("SDK MCP ausente: execute pip install -r requirements.txt") from exc
+    command, args = server_command()
+    print("[INSPECAO] No Chrome pessoal, abra o compositor Business Suite,")
+    print("selecione a conta Instagram e exiba as opcoes Data e Horario.")
+    print("[INSPECAO] Apenas identifica UIDs. Nao envia imagens, preenche campos,")
+    print("nem cria reserva SQLite ou agenda publicacao.")
+    if input("Digite INSPECIONAR CAMPOS: ").strip() != "INSPECIONAR CAMPOS":
+        print("[CANCELADO] Inspecao nao iniciada.")
+        return
+    params = StdioServerParameters(command=command, args=args)
+    try:
+        async with stdio_client(params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                bridge = ChromeMCP(session)
+                page_id = await bridge.meta_page()
+                await bridge.assert_meta_page(page_id)
+                fields = discover_fields(await bridge.call("take_snapshot", pageId=page_id))
+                for name, found in field_report(fields).items():
+                    print(f"[CAMPO] {name}: {'IDENTIFICADO' if found else 'MANUAL'}")
+                if fields.ambiguous:
+                    print("[AMBIGUO] " + ", ".join(fields.ambiguous))
+                print("[OK] Inspecao sem alterar formulario, planilha ou SQLite.")
+    except Exception as exc:
+        raise RuntimeError(
+            "Falha ao inspecionar campos: " + connection_failure_details(exc)
         ) from exc
 
 
