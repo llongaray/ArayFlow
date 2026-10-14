@@ -222,7 +222,7 @@ class ChromeMCP:
                     await asyncio.sleep(0.4)
         if not options:
             # Nunca registrar URL, titulo nem snapshot de outras abas.
-            total_pages = len(re.findall(r"(?m)^\\s*(?:[-*]\\s*)?\\d+:\\s+", listing))
+            total_pages = len(re.findall(r"(?m)^\s*(?:[-*]\s*)?\d+:\s+", listing))
             raise RuntimeError(
                 "Chrome MCP conectado, mas nenhuma aba em business.facebook.com foi encontrada "
                 f"({total_pages} abas enumeradas). Abra https://business.facebook.com/ "
