@@ -889,3 +889,32 @@ de formulario ainda precisam de validacao visual antes do primeiro
 agendamento, e nenhum clique final e realizado pelo robo.
 
 Referencia do formato: https://github.com/ChromeDevTools/chrome-devtools-mcp/issues/2156
+
+
+### Rotulos reais do compositor Meta em portugues (outubro/2026)
+
+Capturas do Business Suite da conta `@aray_solucoes` mostraram:
+`Adicionar foto/vídeo` para imagens, `Texto` para legenda e
+`Programar > Definir data e hora` como opcao de agendamento.
+
+O assistente agora reconhece **os dois primeiros rotulos** quando o
+Chrome expuser os elementos como controles acessiveis unicos.
+`--inspect-composer` continua **somente leitura**. Para que os campos
+`date` e `time` possam ser identificados, **ative manualmente**
+`Definir data e hora` ANTES de digitar `PRONTO`. Com o botao
+desligado, esses campos estao escondidos e o retorno `MANUAL` e normal.
+
+Se o campo `Texto` aparecer na pagina mas seu `textbox` nao tiver
+nome acessivel, o assistente mostra a contagem de caixas de texto sem
+rotulo e mantem a legenda manual: ele nao adivinha um campo que poderia
+ser de outra finalidade. O resumo nao revela URLs ou conteudo das abas.
+
+Comandos de validacao (PowerShell 5.1; comando unico):
+
+```powershell
+Clear-Host; git pull origin main; if ($LASTEXITCODE -eq 0) { python -m unittest test_existing_chrome test_business_suite -v; if ($LASTEXITCODE -eq 0) { python business_suite_assistant.py --inspect-composer } }
+```
+
+Os testes offline usam snapshots simulados e nao substituem o teste
+com o compositor REAL. A automacao nao envia o formulario final de
+agendamento, e so grava `scheduled` apos confirmacao no Planejador.
