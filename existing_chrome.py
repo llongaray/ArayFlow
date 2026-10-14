@@ -463,6 +463,8 @@ async def inspect_existing_composer() -> None:
                 hints = safe_composer_hints(snapshot)
                 print("[ESTRUTURA] Botao Adicionar foto/video: "
                       + ("SIM" if hints["add_media_button"] else "NAO IDENTIFICADO"))
+                print("[ESTRUTURA] Rotulo Texto: "
+                      + ("SIM" if hints["text_label"] else "NAO IDENTIFICADO"))
                 print(f"[ESTRUTURA] Caixas de texto com UID: {hints['textbox_controls']}; "
                       f"sem rotulo: {hints['unlabelled_textboxes']}")
                 print("[ESTRUTURA] Definir data e hora visivel: "
