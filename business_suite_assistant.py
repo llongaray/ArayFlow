@@ -243,10 +243,14 @@ def start_browser(rows: list[dict], drive, ledger: BusinessSuiteStore):
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Meta Business Suite: lote assistido com navegador visivel")
+    parser = argparse.ArgumentParser(description="Meta Business Suite: agendamento assistido em Chrome isolado ou ja aberto")
     parser.add_argument("--date", help="AAAA-MM-DD")
     parser.add_argument("--post", help="Filtra ID de uma publicacao")
-    parser.add_argument("--start", action="store_true", help="Abre navegador e auxilia agendamento")
+    parser.add_argument("--start", action="store_true", help="Inicia agendamento assistido")
+    parser.add_argument(
+        "--browser", choices=["isolated", "existing"], default="isolated",
+        help="isolated = Chrome com perfil exclusivo; existing = conectar ao Chrome ja aberto (MCP)",
+    )
     parser.add_argument("--status", action="store_true", help="Mostra registros SQLite sem acessar Meta")
     parser.add_argument("--confirm", metavar="ID", help="Confirma agendamento pendente apos verificar manualmente no Meta")
     args = parser.parse_args()
@@ -299,7 +303,12 @@ def main() -> int:
             if not args.start:
                 print("[DRY-RUN] Nada foi agendado. Use --start para abrir o navegador.")
                 return 0
-            start_browser(rows, drive, ledger)
+            if args.browser == "existing":
+                import asyncio
+                from existing_chrome import schedule_existing_chrome
+                asyncio.run(schedule_existing_chrome(rows, drive, ledger, DB_FILE))
+            else:
+                start_browser(rows, drive, ledger)
             return 0
     finally:
         ledger.close()
