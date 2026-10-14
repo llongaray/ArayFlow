@@ -190,6 +190,38 @@ class MetaSuiteTests(unittest.TestCase):
         self.assertEqual(invalid_origin.status_code, 403)
         change_task.assert_not_called()
 
+    def test_business_suite_start_accepts_localhost_alias_origin(self):
+        """Regressao: POST feito a 127.0.0.1 com Origin localhost e valido."""
+        import os
+        py = self.root / ".venv" / "Scripts" / "python.exe"
+        py.parent.mkdir(parents=True, exist_ok=True)
+        py.write_text("", encoding="utf-8")
+        (self.root / "business_suite_assistant.py").write_text("", encoding="utf-8")
+        app = create_app(root=self.root)
+        app.config["TESTING"] = True
+        with patch.dict(os.environ, {"ARAYFLOW_AUTOPUBLISH_ENABLED": "false"}), \
+             patch("dashboard.get_calendar", return_value=[]), \
+             patch("dashboard.task_state", return_value="Disabled"), \
+             patch("dashboard.sys.platform", "win32"), \
+             patch("dashboard.subprocess.Popen") as popen:
+            page = app.test_client().get("/?date=2026-10-14",
+                                         headers={"Host": "127.0.0.1:8766"})
+            self.assertEqual(page.status_code, 200)
+            token = re.search(
+                r'<form[^>]+action="/business-suite/start"[^>]*>.*?'
+                r'<input[^>]+name="csrf"[^>]+value="([^"]+)"',
+                page.get_data(as_text=True), re.S,
+            )
+            self.assertIsNotNone(token)
+            posted = app.test_client().post(
+                "/business-suite/start",
+                data={"csrf": token.group(1), "confirmation": "ABRIR",
+                      "date": "2026-10-14"},
+                headers={"Host": "127.0.0.1:8766", "Origin": "http://localhost:8766"},
+            )
+            self.assertEqual(posted.status_code, 302)
+            popen.assert_called_once()
+
     def test_dashboard_start_requires_csrf(self):
         app = create_app(root=self.root)
         app.config["TESTING"] = True
