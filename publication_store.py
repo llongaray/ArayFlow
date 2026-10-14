@@ -27,7 +27,7 @@ class PublicationStore:
         ).fetchone()
 
     def set(self, post_id: str, status: str, *, media_id=None, container_id=None):
-        if status not in {"prepared", "publishing", "published", "uncertain", "failed"}:
+        if status not in {"preparing", "prepared", "publishing", "published", "uncertain", "failed"}:
             raise ValueError("Status invalido")
         self.conn.execute(
             """INSERT INTO publications(post_id,status,media_id,container_id,updated_at)
@@ -44,3 +44,30 @@ class PublicationStore:
 
     def close(self):
         self.conn.close()
+
+    def claim(self, post_id: str) -> bool:
+        """Reserva atomicamente um post nunca processado; bloqueia repeticoes."""
+        now = datetime.now(timezone.utc).isoformat()
+        cur = self.conn.execute(
+            """INSERT OR IGNORE INTO publications
+               (post_id,status,media_id,container_id,updated_at)
+               VALUES(?,'preparing',NULL,NULL,?)""", (post_id, now)
+        )
+        self.conn.commit()
+        return cur.rowcount == 1
+
+    def transition(self, post_id: str, expected: str, target: str,
+                   *, media_id=None, container_id=None) -> bool:
+        """Atualiza apenas se a sessao estiver no estado esperado."""
+        if target not in {"preparing","prepared","publishing","published","uncertain","failed"}:
+            raise ValueError("Status invalido")
+        cur = self.conn.execute(
+            """UPDATE publications SET status=?,
+               media_id=COALESCE(?,media_id),
+               container_id=COALESCE(?,container_id),updated_at=?
+               WHERE post_id=? AND status=?""",
+            (target, media_id, container_id,
+             datetime.now(timezone.utc).isoformat(), post_id, expected)
+        )
+        self.conn.commit()
+        return cur.rowcount == 1
