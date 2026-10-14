@@ -21,7 +21,8 @@ from arayflow.editorial import scheduled_time
 from arayflow.local_media import ensure_local
 from arayflow.settings import ZONE
 from business_suite_forms import (
-    discover_fields, field_report, plan_form_values, safe_composer_hints, validate_media_files,
+    discover_fields, field_report, plan_form_values, safe_composer_hints,
+    safe_control_shapes, validate_media_files,
 )
 
 META_URL = "https://business.facebook.com/"
@@ -469,11 +470,29 @@ async def inspect_existing_composer() -> None:
                       f"sem rotulo: {hints['unlabelled_textboxes']}")
                 print("[ESTRUTURA] Definir data e hora visivel: "
                       + ("SIM" if hints["schedule_switch_present"] else "NAO IDENTIFICADO"))
+                shapes = safe_control_shapes(snapshot)
+                counts = shapes["roles"]
+                texts = shapes["textbox_types"]
+                print("[PAPEIS] " + " | ".join(
+                    f"{role}={counts[role]}"
+                    for role in ("textbox", "button", "combobox", "spinbutton", "switch", "input")
+                ))
+                print("[LEGENDA] Textboxes com rotulo esperado: "
+                      f"{texts['caption']}; nome diferente: {texts['other_named']}; "
+                      f"sem nome: {texts['unnamed']}")
+                print("[DATA/HORA] Controles com valor semelhante a data: "
+                      + (", ".join(shapes["date_value_roles"]) or "nenhum")
+                      + "; hora: "
+                      + (", ".join(shapes["time_value_roles"]) or "nenhum"))
+                print("[DATA/HORA] Valores aparentes presentes no snapshot: "
+                      f"data={'SIM' if shapes['date_text_visible'] else 'NAO'}, "
+                      f"hora={'SIM' if shapes['time_text_visible'] else 'NAO'}")
                 if fields.ambiguous:
                     print("[AMBIGUO] " + ", ".join(fields.ambiguous))
                 if not fields.date_uid or not fields.time_uid:
-                    print("[INFO] Confira se 'Definir data e hora' foi ATIVADO. "
-                          "Campos escondidos nao podem ser preenchidos.")
+                    print("[INFO] Se o interruptor ja estiver ligado, a Meta pode usar "
+                          "controles de data/hora que nao sao textboxes editaveis. "
+                          "Nao preencher automaticamente ate identificarmos o tipo.")
                 print("[OK] Inspecao sem enviar imagens, alterar campos ou reservar posts.")
     except Exception as exc:
         raise RuntimeError(
