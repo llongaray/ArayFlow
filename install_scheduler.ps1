@@ -26,7 +26,7 @@ $Identity = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 $Action = New-ScheduledTaskAction -Execute $Python -Argument ('"{0}" --once --live' -f $Worker) -WorkingDirectory $Root
 $Trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration (New-TimeSpan -Days 3650)
 $Principal = New-ScheduledTaskPrincipal -UserId $Identity -LogonType Interactive -RunLevel Limited
-$Settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 5) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+$Settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 20) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Principal $Principal -Settings $Settings -Description 'ArayFlow: verifica posts aprovados a cada 5 minutos; prepara e publica na Meta no horario do Sheets' -Force | Out-Null
 
 Write-Host "Tarefa instalada: $TaskName"
