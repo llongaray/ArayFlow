@@ -122,3 +122,48 @@ Confirmacao interativa: `PUBLICAR ARAY`. O comando publica imediatamente, nao ag
 - P0: teste isolado de publicacao de uma imagem — validado anteriormente.
 - P1: Google Sheets e Drive — validados para leitura e download.
 - P2: validacao offline e modulos de carrossel/idempotencia — implementados, **aguardando teste local e teste real supervisionado**.
+
+
+---
+
+## v0.3.0 — Cloudflare R2
+
+A integracao R2 usa **boto3** e suas credenciais S3 locais. Nao envia arquivos ao Instagram automaticamente.
+
+Configure no `.env` (NAO comite):
+
+```dotenv
+R2_ACCOUNT_ID=...
+R2_ACCESS_KEY_ID=...
+R2_SECRET_ACCESS_KEY=...
+R2_BUCKET_NAME=arayflow-media
+R2_PUBLIC_URL=https://pub-....r2.dev
+```
+
+No PowerShell, dentro de `.venv`:
+
+```powershell
+git pull origin main
+python -m pip install -r requirements.txt
+python -m unittest test_arayflow test_r2 -v
+python r2_upload.py --check
+python r2_upload.py --post ARAY-20261014-001
+```
+
+O ultimo comando e um **dry-run** e nao envia nada. Para **fazer upload publico real**, apos revisar as imagens:
+
+```powershell
+python r2_upload.py --post ARAY-20261014-001 --upload
+```
+
+Digite `ENVIAR R2` quando solicitado. O script gera `data/ARAY-20261014-001-r2-urls.json` com URLs HTTPS, sem publicar no Instagram. O arquivo `data/` e ignorado no Git.
+
+Somente apos **revisao editorial** e apos mudar a coluna Status para `Aprovado`, voce podera usar o fluxo existente, que tambem exige confirmacao:
+
+```powershell
+python publish_post.py --post ARAY-20261014-001 --manifest .\data\ARAY-20261014-001-r2-urls.json --prepare
+```
+
+O passo `--prepare` cria conteineres na Meta, mas nao publica. `--publish` e separado, publica imediatamente e exige `PUBLICAR ARAY`.
+
+**Limitacoes e seguranca:** URLs no dominio r2.dev sao publicas; ele serve para testes, nao hospedagem de producao. Uploads geram consumo R2; acompanhe as metricas e limites gratuitos. **A exclusao automatica ainda nao esta ativada**, para evitar que imagens sejam removidas antes de a Meta processar os conteineres. O metodo de exclusao do modulo R2 restringe o prefixo gerenciado, mas requer futura rotina de limpeza supervisionada. Integracao real R2/Meta ainda exige validacao local; este commit nao prova conectividade com sua conta.
