@@ -97,6 +97,14 @@ class MetaSuiteTests(unittest.TestCase):
         self.assertIn("business_suite_assistant.py", text)
         self.assertIn("scheduled", text)
 
+    def test_dashboard_start_requires_csrf(self):
+        app = create_app(root=self.root)
+        app.config["TESTING"] = True
+        response = app.test_client().post("/business-suite/start",
+            data={"date": DAY, "confirmation": "ABRIR"},
+            headers={"Host": "localhost"})
+        self.assertEqual(response.status_code, 403)
+
     def test_dashboard_rejects_untrusted_host(self):
         app = create_app(root=self.root)
         app.config["TESTING"] = True
