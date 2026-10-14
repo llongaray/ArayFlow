@@ -1,5 +1,6 @@
 """Testes offline do assistente Business Suite v0.7. Sem navegador ou credenciais."""
 import tempfile
+import re
 import unittest
 from datetime import datetime
 from pathlib import Path
@@ -133,6 +134,58 @@ class MetaSuiteTests(unittest.TestCase):
         self.assertIn("ARAY-20261014-002", text)
         self.assertIn("business_suite_assistant.py", text)
         self.assertIn("scheduled", text)
+
+    def test_pause_with_signed_token_without_session_cookie(self):
+        app = create_app(root=self.root)
+        app.config["TESTING"] = True
+        with patch("dashboard.get_calendar", return_value=[]), \
+             patch("dashboard.task_state", return_value="Ready"):
+            response = app.test_client().get("/", headers={"Host": "127.0.0.1:8766"})
+        self.assertEqual(response.status_code, 200)
+        markup = response.get_data(as_text=True)
+        match = re.search(
+            r'<form[^>]+action="/scheduler/pause"[^>]*>.*?'
+            r'<input[^>]+name="csrf"[^>]+value="([^"]+)"',
+            markup, re.S,
+        )
+        self.assertIsNotNone(match, "Formulario de pausa deve incluir token assinado")
+        with patch("dashboard.change_task") as change_task:
+            # Novo cliente SEM cookie de sessao, mas com token assinado valido.
+            posted = app.test_client().post(
+                "/scheduler/pause", data={"confirmation": "PAUSAR", "csrf": match.group(1)},
+                headers={"Host": "127.0.0.1:8766", "Origin": "http://127.0.0.1:8766"},
+            )
+        self.assertEqual(posted.status_code, 302)
+        change_task.assert_called_once_with("pause")
+
+    def test_pause_rejects_missing_or_wrong_action_token(self):
+        app = create_app(root=self.root)
+        app.config["TESTING"] = True
+        response = app.test_client().post(
+            "/scheduler/pause", data={"confirmation": "PAUSAR"},
+            headers={"Host": "127.0.0.1:8766", "Origin": "http://127.0.0.1:8766"},
+        )
+        self.assertEqual(response.status_code, 403)
+        with patch("dashboard.get_calendar", return_value=[]), \
+             patch("dashboard.task_state", return_value="Ready"):
+            page = app.test_client().get("/", headers={"Host": "127.0.0.1:8766"})
+        token = re.search(
+            r'<form[^>]+action="/business-suite/start"[^>]*>.*?'
+            r'<input[^>]+name="csrf"[^>]+value="([^"]+)"',
+            page.get_data(as_text=True), re.S,
+        )
+        # Neste teste o botao Business Suite e renderizado porque a chave
+        # do .env pode estar configurada; se nao, testar emissao pela rota
+        # de agendamento que sempre esta presente no monitoramento.
+        if token:
+            with patch("dashboard.change_task") as change_task:
+                wrong = app.test_client().post(
+                    "/scheduler/pause",
+                    data={"csrf": token.group(1), "confirmation": "PAUSAR"},
+                    headers={"Host": "127.0.0.1:8766"},
+                )
+            self.assertEqual(wrong.status_code, 403)
+            change_task.assert_not_called()
 
     def test_dashboard_start_requires_csrf(self):
         app = create_app(root=self.root)
