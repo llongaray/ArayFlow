@@ -263,3 +263,80 @@ de seguranca adicionais antes de habilitar modo autonomo.
 **Observacao:** GitHub Actions executa apenas testes unitarios simulados; nao
 usa credenciais e nao conecta no seu bucket. A conectividade R2 real e a
 exclusao real dependem de validacao local supervisionada.
+
+
+---
+
+## v0.5.0 — Agendamento automatico de publicacoes
+
+O Windows executa `scheduled_publish.py` a cada 5 minutos. O programa le os posts **do dia atual**, pelo fuso `America/Sao_Paulo`, e **somente posts com Status "Aprovado"** podem ser preparados/publicados.
+
+- Ate 10 minutos antes do horario: baixa artes ausentes do Google Drive, valida PNG/JPG, limpa arquivos **de dias anteriores** do R2 (respeitando sessoes/publicacoes pendentes), sobe ou reutiliza as imagens e prepara o conteiner Meta.
+- No horario da planilha: verifica o conteiner e publica. Uma tolerancia maxima de 15 minutos permite pequenos atrasos; atrasos maiores sao ignorados, sem compensacao automatica.
+- Sessao SQLite: estados `preparing`, `prepared`, `publishing`, `published`, `uncertain`. Se uma chamada externa falhar com resultado incerto, o ArayFlow **nao tenta publicar de novo** ate revisao manual.
+- Posts de outras datas nao sao publicados retroativamente.
+- **Nao atualiza automaticamente a coluna Status do Google Sheets** (OAuth atual e somente leitura). Use SQLite e logs para acompanhar e revise a planilha manualmente.
+- Nao executa nenhuma chamada de escrita se `--live` estiver ausente.
+- Mesmo com `--live`, a publicacao e bloqueada ate que `ARAYFLOW_AUTOPUBLISH_ENABLED=true` seja configurado manualmente no `.env`.
+
+### Instalacao e validacao
+
+No PowerShell, na pasta do projeto, com `.venv`:
+
+```powershell
+git pull origin main
+python -m pip install -r requirements.txt
+python -m unittest test_arayflow test_r2 test_sync test_scheduler -v
+python scheduled_publish.py --once
+```
+
+O ultimo comando e **DRY-RUN**. Ele consulta a planilha e mostra `WAIT`, `PREPARE`, `DUE`, `EXPIRED` ou `SKIP`. Nao sobe imagens nem publica.
+
+**Ativar conscientemente o envio automatico:**
+
+1. Revise a coluna `Status`, os horarios e as imagens. **Atencao: um post ja `prepared` no SQLite pode ser publicado no proximo horario.**
+2. Configure `ARAYFLOW_AUTOPUBLISH_ENABLED=true` no `.env` local (nunca no Git).
+3. Execute o instalador da tarefa agendada:
+
+```powershell
+.\install_scheduler.ps1
+```
+
+O instalador cria `ArayFlow Publisher` no Agendador de Tarefas do Windows, com verificacao a cada **5 minutos** e `--once --live`, usando `.venv\Scripts\python.exe`.
+
+A tarefa foi projetada para a **sessao interativa do usuario** (sem armazenar senha Windows); mantenha o usuario logado e o computador acordado/conectado. Se o Windows hibernar, o script ignora horarios mais de 15 minutos atrasados. A renovacao de um OAuth Google expirado pode exigir intervencao no navegador.
+
+**Consultar os logs:**
+
+```powershell
+Get-Content .\logs\scheduled_publish.log -Tail 40
+```
+
+**Pausar a tarefa de publicacao automatica:**
+
+```powershell
+Disable-ScheduledTask -TaskName "ArayFlow Publisher"
+```
+
+**Reativar:**
+
+```powershell
+Enable-ScheduledTask -TaskName "ArayFlow Publisher"
+```
+
+**Remover:**
+
+```powershell
+.\install_scheduler.ps1 -Remove
+```
+
+Se o PowerShell bloquear arquivos `.ps1`, use `powershell -NoProfile -ExecutionPolicy Bypass -File .\install_scheduler.ps1` apenas para esta invocacao, sem alterar a politica global.
+
+### Limitacoes e cuidados
+
+- GitHub Actions executa apenas testes **offline**. Testes reais da tarefa agendada dependem do seu Windows, tokens Google/Meta e R2.
+- A tarefa nao pesquisa noticias, nao gera artes e nao cria linhas na planilha: essas etapas continuam no fluxo editorial existente.
+- As imagens do Google Drive precisam estar completas antes da janela de preparacao.
+- A execucao pode ocorrer alguns minutos apos o horario da planilha; **nao e agendamento nativo nos servidores da Meta**.
+- As imagens de posts com sessao Meta `prepared`, `preparing`, `publishing` ou `uncertain` sao protegidas contra a limpeza automatica.
+- Se quiser primeiro apenas o agendamento sem publicacao, NAO defina `ARAYFLOW_AUTOPUBLISH_ENABLED=true`; a simulacao manual continua disponivel.
