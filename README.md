@@ -668,3 +668,40 @@ registrado APENAS apos a confirmacao humana no Planejador.
 Mais informacoes:
 - https://developer.chrome.com/docs/devtools/agents/get-started/configuration
 - https://github.com/ChromeDevTools/chrome-devtools-mcp
+
+
+### Diagnostico de conexao Chrome DevTools MCP (v0.7.2)
+
+Se o modo `--browser existing` retornar erro generico antes da tela do
+Business Suite, atualize o projeto e execute o diagnostico:
+
+```powershell
+git pull origin main
+python -m unittest test_existing_chrome -v
+python business_suite_assistant.py --diagnose-chrome
+```
+
+Esse comando NAO usa Google Sheets, nao cria publicacoes/agendamentos,
+nao grava reservas no SQLite e nao clica em paginas. Ele inicia o MCP,
+pede autorizacao no Chrome e conta somente abas do dominio
+`business.facebook.com`.
+
+**Preparacao:** no Chrome pessoal (144+), abra
+`chrome://inspect/#remote-debugging`, habilite a depuracao e autorize
+a conexao solicitada. Se houver varios perfis do Chrome, o autoConnect
+seleciona o perfil padrao, que pode nao ser o perfil logado. Feche
+temporariamente outras conexoes Chrome DevTools MCP que possam competir
+pela sessao. Node.js 22+ e `npx` precisam estar disponiveis no PATH.
+
+A partir desta revisao, o comando mostra a causa interna do SDK MCP
+(inclusive erros de `ExceptionGroup`) com tentativa de ocultar URLs,
+tokens, cookies e outros segredos. **Antes de compartilhar o resultado,
+revise-o e remova quaisquer dados sensiveis remanescentes.**
+
+Se o diagnostico retornar `[OK] MCP conectado`, use normalmente:
+
+```powershell
+python business_suite_assistant.py --date 2026-10-14 --start --browser existing
+```
+
+Referencia oficial: https://github.com/ChromeDevTools/chrome-devtools-mcp/blob/main/docs/troubleshooting.md
