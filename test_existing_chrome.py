@@ -164,9 +164,22 @@ class ExistingChromeTests(unittest.TestCase):
         self.assertNotIn("supersecret", diagnosis)
 
     def test_default_connection_uses_debugging_port(self):
+        with tempfile.TemporaryDirectory() as folder:
+            port_file = Path(folder) / "DevToolsActivePort"
+            port_file.write_text("9222\n/devtools/browser/abc-def\n", encoding="utf-8")
+            with patch.dict(os.environ, {
+                "ARAYFLOW_CHROME_USER_DATA": folder,
+                "ARAYFLOW_CHROME_BROWSER_URL": "active-port",
+            }):
+                args = chrome_connection_args()
+        self.assertEqual(args, ["--wsEndpoint", "ws://127.0.0.1:9222/devtools/browser/abc-def"])
+
+    def test_classic_browser_url_remains_available(self):
         with patch.dict(os.environ, {"ARAYFLOW_CHROME_BROWSER_URL": "http://127.0.0.1:9222"}):
-            args = chrome_connection_args()
-        self.assertEqual(args, ["--browserUrl", "http://127.0.0.1:9222"])
+            self.assertEqual(
+                chrome_connection_args(),
+                ["--browserUrl", "http://127.0.0.1:9222"],
+            )
 
     def test_auto_connect_remains_optional(self):
         with patch.dict(os.environ, {"ARAYFLOW_CHROME_BROWSER_URL": "auto"}):
@@ -184,6 +197,7 @@ class ExistingChromeTests(unittest.TestCase):
         joined = " ".join(args)
         self.assertIn("--browserUrl http://127.0.0.1:9222", joined)
         self.assertNotIn("--autoConnect", joined)
+        self.assertNotIn("--wsEndpoint", joined)
 
     def test_node_missing_has_actionable_error(self):
         with patch("existing_chrome.shutil.which", return_value=None):

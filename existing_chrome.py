@@ -33,9 +33,47 @@ UPLOAD_TERMS = re.compile(
 )
 
 
+_BROWSER_PATH = re.compile(r"/devtools/browser/[A-Za-z0-9_-]+")
+
+
+def chrome_user_data_dir() -> Path:
+    override = os.getenv("ARAYFLOW_CHROME_USER_DATA", "").strip()
+    if override:
+        return Path(override)
+    local = os.environ.get("LOCALAPPDATA", "")
+    if not local:
+        raise RuntimeError("LOCALAPPDATA ausente; defina ARAYFLOW_CHROME_USER_DATA")
+    return Path(local) / "Google" / "Chrome" / "User Data"
+
+
+def read_devtools_endpoint() -> str:
+    """Chrome 144+ publica a porta e o caminho secreto em DevToolsActivePort.
+
+    O HTTP em /json/version responde 404 de proposito. A conexao valida e o
+    WebSocket indicado nesse arquivo, em 127.0.0.1.
+    """
+    port_file = chrome_user_data_dir() / "DevToolsActivePort"
+    if not port_file.is_file():
+        raise RuntimeError(
+            "Chrome nao publicou DevToolsActivePort. Abra "
+            "chrome://inspect/#remote-debugging e marque "
+            "'Allow remote debugging for this browser instance'."
+        )
+    lines = [line.strip() for line in port_file.read_text(encoding="utf-8").splitlines() if line.strip()]
+    if len(lines) < 2 or not lines[0].isdecimal():
+        raise RuntimeError("DevToolsActivePort incompleto; religue a depuracao remota no Chrome")
+    port = int(lines[0])
+    path = lines[1]
+    if not 1 <= port <= 65535 or not _BROWSER_PATH.fullmatch(path):
+        raise RuntimeError("DevToolsActivePort nao aponta para um navegador local esperado")
+    return f"ws://127.0.0.1:{port}{path}"
+
+
 def chrome_connection_args() -> list[str]:
-    """Porta local explicita por padrao. 'auto' preserva a descoberta --autoConnect."""
-    raw = os.getenv("ARAYFLOW_CHROME_BROWSER_URL", "http://127.0.0.1:9222").strip()
+    """Padrao: WebSocket do DevToolsActivePort. auto e browserUrl continuam opcionais."""
+    raw = os.getenv("ARAYFLOW_CHROME_BROWSER_URL", "active-port").strip()
+    if raw.casefold() in {"", "active-port", "ws", "websocket"}:
+        return ["--wsEndpoint", read_devtools_endpoint()]
     if raw.casefold() in {"auto", "autoconnect"}:
         return ["--autoConnect"]
     parsed = urlsplit(raw)
@@ -44,10 +82,22 @@ def chrome_connection_args() -> list[str]:
             or parsed.port is None or parsed.username or parsed.password
             or parsed.query or parsed.fragment or parsed.path not in {"", "/"}):
         raise ValueError(
-            "ARAYFLOW_CHROME_BROWSER_URL aceita http://127.0.0.1:9222, "
-            "http://localhost:9222 ou auto"
+            "ARAYFLOW_CHROME_BROWSER_URL aceita active-port, auto, "
+            "http://127.0.0.1:9222 ou http://localhost:9222"
         )
     return ["--browserUrl", f"http://{host}:{parsed.port}"]
+
+
+def connection_label(args: list[str]) -> str:
+    """Descricao segura: nao revela o caminho secreto do WebSocket."""
+    if args == ["--autoConnect"]:
+        return "autoConnect"
+    if len(args) == 2 and args[0] == "--browserUrl":
+        return args[1]
+    if len(args) == 2 and args[0] == "--wsEndpoint":
+        parsed = urlsplit(args[1])
+        return f"ws://{parsed.hostname}:{parsed.port}"
+    return "desconhecida"
 
 
 def _mcp_invocation() -> list[str]:
@@ -210,7 +260,7 @@ def connection_failure_details(error: BaseException) -> str:
         visited.add(id(exc))
         kind = type(exc).__name__
         message = str(exc).splitlines()[0][:500] if str(exc).strip() else "sem descricao"
-        message = re.sub(r"https?://\S+", "[URL]", message)
+        message = re.sub(r"(?:https?|wss?)://\S+", "[URL]", message)
         message = re.sub(
             r"(?i)\b(token|cookie|password|secret|authorization|api[_-]?key)\b"
             r"\s*[:=]\s*[^\s,;]+",
@@ -246,11 +296,8 @@ async def diagnose_chrome_connection() -> None:
     print("[DIAGNOSTICO] Em chrome://inspect/#remote-debugging, a opcao")
     print("    'Allow remote debugging for this browser instance' precisa estar marcada.")
     print("    A pagina mostra 'Server running at: 127.0.0.1:9222' quando esta pronta.")
-    if endpoint == ["--autoConnect"]:
-        print("[DIAGNOSTICO] Modo auto: o MCP escolhe o perfil sozinho.")
-    else:
-        print(f"[DIAGNOSTICO] Conexao explicita: {endpoint[1]}")
-    print("[DIAGNOSTICO] O Chrome pedira sua autorizacao de conexao.")
+    print(f"[DIAGNOSTICO] Conexao: {connection_label(endpoint)}")
+    print("[DIAGNOSTICO] O Chrome pedira sua autorizacao de conexao. Clique em Permitir.")
     if input("Digite DIAGNOSTICAR CHROME para conectar sem agendar: ").strip() != "DIAGNOSTICAR CHROME":
         print("[CANCELADO] Nenhuma conexao iniciada.")
         return
@@ -293,9 +340,9 @@ async def schedule_existing_chrome(rows: list[dict], drive, ledger, db_file: Pat
         "\n[CHROME PESSOAL] No Chrome onde a Meta JA esta logada, abra "
         "chrome://inspect/#remote-debugging e marque "
         "'Allow remote debugging for this browser instance'. "
-        "Com a opcao ligada, a pagina mostra Server running at: 127.0.0.1:9222. "
-        "O ArayFlow conecta nesse endereco. Para a descoberta automatica, "
-        "defina ARAYFLOW_CHROME_BROWSER_URL=auto no .env."
+        "Com a opcao ligada, o Chrome grava DevToolsActivePort e escuta em "
+        "127.0.0.1:9222. O ArayFlow usa esse WebSocket. "
+        "ARAYFLOW_CHROME_BROWSER_URL=auto volta para a descoberta do MCP."
     )
     print(
         "[SEGURANCA] Autorize a conexao solicitada PELO Chrome somente "
