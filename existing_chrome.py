@@ -80,6 +80,28 @@ def unique_uid(snapshot: str, label: re.Pattern[str], allowed: re.Pattern[str]) 
             matches.append(match[1])
     return matches[0] if len(set(matches)) == 1 and matches else None
 
+def describe_mcp_tool_error(result) -> str:
+    """Classifica erro MCP sem exibir texto bruto de paginas ou credenciais."""
+    raw = extract_text(result)
+    cases = [
+        ("DevToolsActivePort", "Chrome nao criou/encontrou DevToolsActivePort; confira depuracao do perfil correto"),
+        ("Network.enable timed out", "Timeout de Network.enable; possivel aba congelada ou conflito de conexao"),
+        ("Runtime.runIfWaitingForDebugger timed out", "Timeout de inicializacao de abas Chrome"),
+        ("socket connection was closed", "Conexao CDP/WebSocket encerrada"),
+        ("Target closed", "Aba ou Chrome fechado durante conexao"),
+        ("Permission denied", "Permissao de depuracao recusada"),
+        ("not allowed", "Operacao nao autorizada pelo Chrome"),
+        ("not found", "Recurso do navegador nao encontrado"),
+        ("timed out", "Tempo limite excedido ao consultar o Chrome"),
+        ("could not connect", "Nao foi possivel estabelecer conexao de depuracao"),
+    ]
+    for fragment, description in cases:
+        if fragment.casefold() in raw.casefold():
+            return description
+    # O retorno de erro pode conter cookies, titulos de abas, querystrings
+    # e IDs de sessao. Nunca o registramos integralmente no terminal.
+    return "Falha nao classificada de list_pages; verifique depuracao, perfis e logs locais do MCP"
+
 
 class ChromeMCP:
     def __init__(self, session):
@@ -88,7 +110,9 @@ class ChromeMCP:
     async def call(self, name: str, **arguments) -> str:
         result = await self.session.call_tool(name, arguments=arguments)
         if getattr(result, "isError", False):
-            raise RuntimeError(f"Falha de ferramenta Chrome DevTools MCP: {name}")
+            raise RuntimeError(
+                f"Chrome DevTools MCP {name}: {describe_mcp_tool_error(result)}"
+            )
         return extract_text(result)
 
     async def meta_page(self) -> int:
@@ -202,7 +226,10 @@ async def diagnose_chrome_connection() -> None:
                 await session.initialize()
                 result = await session.call_tool("list_pages", arguments={})
                 if getattr(result, "isError", False):
-                    raise RuntimeError("Chrome DevTools MCP list_pages retornou erro")
+                    raise RuntimeError(
+                        "Chrome DevTools MCP list_pages: "
+                        + describe_mcp_tool_error(result)
+                    )
                 count = len(parse_business_pages(extract_text(result)))
                 print(f"[OK] MCP conectado ao Chrome existente; abas Meta Business Suite: {count}.")
                 print("[OK] Nenhum post foi preparado, enviado ou agendado.")
