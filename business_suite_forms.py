@@ -171,3 +171,62 @@ def safe_composer_hints(snapshot: str) -> dict[str, object]:
             for line in lines
         ),
     }
+
+
+# Diagnostico de acessibilidade, sem expor rotulos nao reconhecidos ou texto de posts.
+_MONTHS = r"janeiro|fevereiro|mar[cç]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro"
+_DATE_AS_TEXT = re.compile(
+    rf"\b\d{{1,2}}\s+de\s+(?:{_MONTHS})\s+de\s+\d{{4}}\b|"
+    r"\b\d{1,2}/\d{1,2}/\d{4}\b",
+    re.I,
+)
+_TIME_AS_TEXT = re.compile(r"(?<!\d)(?:[01]?\d|2[0-3]):[0-5]\d(?!\d)")
+
+
+def safe_control_shapes(snapshot: str) -> dict[str, object]:
+    """Resume tipos de controles, nunca imprime UIDs, texto ou URLs privadas.
+
+    *Nao* usa esses palpites para preencher os campos. Apenas ajuda a
+    descobrir se a Meta usa buttons, comboboxes ou textboxs para data/hora.
+    """
+    counts = {role: 0 for role in (
+        "textbox", "button", "combobox", "spinbutton", "switch", "input", "other"
+    )}
+    textbox_types = {
+        "caption": 0, "date": 0, "time": 0, "other_named": 0, "unnamed": 0
+    }
+    date_roles: set[str] = set()
+    time_roles: set[str] = set()
+    for line in snapshot.splitlines():
+        found = _CONTROL.match(line)
+        if found is None:
+            continue
+        _uid, role, detail = found.groups()
+        role = role.casefold()
+        counts[role if role in counts else "other"] += 1
+        label_match = _LABEL.search(detail)
+        label = label_match.group(1).strip() if label_match else ""
+        if role == "textbox":
+            if not label:
+                textbox_types["unnamed"] += 1
+            elif _CAPTION.fullmatch(label):
+                textbox_types["caption"] += 1
+            elif _DATE.fullmatch(label):
+                textbox_types["date"] += 1
+            elif _TIME.fullmatch(label):
+                textbox_types["time"] += 1
+            else:
+                textbox_types["other_named"] += 1
+        if role in {"button", "textbox", "input", "combobox", "spinbutton"}:
+            if _DATE_AS_TEXT.search(label):
+                date_roles.add(role)
+            if _TIME_AS_TEXT.search(label):
+                time_roles.add(role)
+    return {
+        "roles": counts,
+        "textbox_types": textbox_types,
+        "date_value_roles": tuple(sorted(date_roles)),
+        "time_value_roles": tuple(sorted(time_roles)),
+        "date_text_visible": bool(_DATE_AS_TEXT.search(snapshot)),
+        "time_text_visible": bool(_TIME_AS_TEXT.search(snapshot)),
+    }
