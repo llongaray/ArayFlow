@@ -705,3 +705,37 @@ python business_suite_assistant.py --date 2026-10-14 --start --browser existing
 ```
 
 Referencia oficial: https://github.com/ChromeDevTools/chrome-devtools-mcp/blob/main/docs/troubleshooting.md
+
+
+### Diagnostico aprimorado: list_pages retornou erro
+
+O MCP pode iniciar corretamente e, ainda assim, a chamada `list_pages`
+retornar `isError=true`. Nessa situacao, o antigo diagnostico mostrava
+somente "Chrome DevTools MCP list_pages retornou erro", ocultando a causa.
+
+Agora o ArayFlow classifica respostas conhecidas, sem imprimir o texto bruto
+do navegador: `DevToolsActivePort` ausente, `Network.enable timed out`,
+`Target closed`, erros de permissao e outros problemas de CDP.
+
+Teste:
+
+```powershell
+git pull origin main
+python -m unittest test_existing_chrome -v
+python business_suite_assistant.py --diagnose-chrome
+```
+
+Se aparecer **DevToolsActivePort**, confira se o Chrome 144+ que esta aberto
+e o perfil autorizado possuem a opcao ativada em
+`chrome://inspect/#remote-debugging`. Caso use varios perfis, o
+autoConnect pode selecionar o perfil padrao, diferente daquele logado.
+
+Se aparecer **Network.enable timed out**, confira abas suspensas ou
+congeladas e feche conexoes de depuracao concorrentes; isso corresponde
+a problemas conhecidos do Chrome DevTools MCP. Evite deixar centenas
+de abas abertas durante o teste. Nao desative o sandbox do Chrome.
+
+O diagnostico continua sem ler a planilha, reservar posts ou clicar em
+Publicar/Agendar. Os erros nao classificados sao suprimidos por
+privacidade. Consulte a documentacao oficial:
+https://github.com/ChromeDevTools/chrome-devtools-mcp/blob/main/docs/troubleshooting.md
