@@ -25,7 +25,7 @@ from business_suite_forms import (
 )
 
 META_URL = "https://business.facebook.com/"
-PAGE_PATTERN = re.compile(r"(?m)^\s*(?:[-*]\s*)?(\d+):\s+(https?://\S+)")
+PAGE_PATTERN = re.compile(r"(?m)^[ \t]*(?:[-*][ \t]+)?(\d+):[ \t]+([^\r\n]+)$")
 UID_PATTERN = re.compile(r"\b(?:uid=)?(\d+_\d+)\b")
 CAPTION_TERMS = re.compile(
     r"legenda|caption|escreva uma legenda|write a caption|descri[cç][aã]o", re.I
@@ -140,21 +140,45 @@ def extract_text(result) -> str:
     )
 
 
-def parse_business_pages(output: str) -> list[int]:
-    """Seleciona somente o hostname business.facebook.com, inclusive ?query.
+def _page_entries(output: str) -> list[tuple[int, str]]:
+    """Le apenas URLs da lista MCP, sem interpretar texto/titulos de abas.
 
-    URLs/titulos das outras abas nunca sao exibidos.
+    Formatos suportados:
+        2: https://business.facebook.com/latest/home
+        2: Meta Business Suite (https://business.facebook.com/latest/home) [selected]
+        2: business.facebook.com/latest/home (https://business.facebook.com/latest/home)
     """
-    ids: list[int] = []
+    pages: list[tuple[int, str]] = []
     for match in PAGE_PATTERN.finditer(output):
-        candidate = match[2].rstrip(").,]")
+        page_id = int(match[1])
+        description = match[2].strip()
+        # Formato MCP recente: titulo da aba (URL) [selected].
+        urls = re.findall(r"\((https?://[^()\s]+)\)", description, re.I)
+        if urls:
+            candidate = urls[-1]
+        else:
+            # Formato MCP anterior: URL imediatamente depois do indice.
+            direct = re.match(r"^(https?://[^\s]+)", description, re.I)
+            if not direct:
+                continue
+            candidate = direct[1].rstrip(").,]")
         try:
             parsed = urlsplit(candidate)
+            hostname = parsed.hostname
         except ValueError:
             continue
-        if parsed.scheme in {"http", "https"} and parsed.hostname == "business.facebook.com":
-            ids.append(int(match[1]))
-    return ids
+        if parsed.scheme in {"http", "https"} and hostname:
+            pages.append((page_id, hostname.casefold()))
+    return pages
+
+
+def parse_business_pages(output: str) -> list[int]:
+    """Identifica o hostname EXATO da Meta, sem expor URLs nem titulos."""
+    return [
+        page_id
+        for page_id, host in _page_entries(output)
+        if host == "business.facebook.com"
+    ]
 
 def unique_uid(snapshot: str, label: re.Pattern[str], allowed: re.Pattern[str]) -> str | None:
     """Retorna uid apenas se houver UM controle nao ambiguo no snapshot atual."""
@@ -233,7 +257,10 @@ class ChromeMCP:
                 options = parse_business_pages(listing)
         if not options:
             # Nunca registrar URL, titulo nem snapshot de outras abas.
-            total_pages = len(re.findall(r"(?m)^\s*(?:[-*]\s*)?\d+:\s+", listing))
+            total_pages = len(PAGE_PATTERN.findall(listing))
+            parsed_hosts = _page_entries(listing)
+            print(f"[CHROME] Abas recebidas: {total_pages}; URLs reconhecidas: {len(parsed_hosts)}.")
+            print("[CHROME] Formatos MCP aceitos: 'ID: URL' e 'ID: Titulo (URL)'.")
             raise RuntimeError(
                 "Chrome MCP conectado, mas nenhuma aba em business.facebook.com foi encontrada "
                 f"({total_pages} abas enumeradas). Abra https://business.facebook.com/ "
