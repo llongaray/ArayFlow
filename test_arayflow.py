@@ -5,6 +5,7 @@ from pathlib import Path
 from PIL import Image
 from image_validator import inspect_image, validate_batch
 from publication_store import PublicationStore
+from arayflow.local_media import require_slide_sequence
 
 class ImageValidatorTests(unittest.TestCase):
     def test_valid_png(self):
@@ -14,6 +15,14 @@ class ImageValidatorTests(unittest.TestCase):
             report = inspect_image(path)
             self.assertEqual((report.width,report.height),(1080,1350))
             self.assertEqual(len(validate_batch([path])),1)
+
+    def test_slide_sequence_requires_continuous_numbers(self):
+        post = "ARAY-20261014-001"
+        complete = [Path(f"{post}_slide-0{n}.png") for n in (1, 2, 3)]
+        require_slide_sequence(complete, 3, post)
+        gapped = [Path(f"{post}_slide-01.png"), Path(f"{post}_slide-03.png")]
+        with self.assertRaisesRegex(ValueError, "continuos"):
+            require_slide_sequence(gapped, 2, post)
 
     def test_invalid_ratio(self):
         with tempfile.TemporaryDirectory() as temp:

@@ -1,5 +1,6 @@
 """Testes offline do Chrome pessoal (sem acesso ao Chrome ou credenciais)."""
 import asyncio
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -7,8 +8,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from existing_chrome import (
-    ChromeMCP, extract_text, parse_business_pages, server_command, unique_uid,
-    CAPTION_TERMS, UPLOAD_TERMS, connection_failure_details, describe_mcp_tool_error,
+    ChromeMCP, chrome_connection_args, extract_text, parse_business_pages,
+    server_command, unique_uid, CAPTION_TERMS, UPLOAD_TERMS,
+    connection_failure_details, describe_mcp_tool_error,
 )
 import re
 
@@ -160,6 +162,28 @@ class ExistingChromeTests(unittest.TestCase):
         self.assertIn("nao classificada", diagnosis)
         self.assertNotIn("mail.google.com", diagnosis)
         self.assertNotIn("supersecret", diagnosis)
+
+    def test_default_connection_uses_debugging_port(self):
+        with patch.dict(os.environ, {"ARAYFLOW_CHROME_BROWSER_URL": "http://127.0.0.1:9222"}):
+            args = chrome_connection_args()
+        self.assertEqual(args, ["--browserUrl", "http://127.0.0.1:9222"])
+
+    def test_auto_connect_remains_optional(self):
+        with patch.dict(os.environ, {"ARAYFLOW_CHROME_BROWSER_URL": "auto"}):
+            self.assertEqual(chrome_connection_args(), ["--autoConnect"])
+
+    def test_remote_chrome_address_is_rejected(self):
+        with patch.dict(os.environ, {"ARAYFLOW_CHROME_BROWSER_URL": "http://example.com:9222"}):
+            with self.assertRaises(ValueError):
+                chrome_connection_args()
+
+    def test_server_command_passes_explicit_port(self):
+        with patch("existing_chrome.shutil.which", return_value="npx"), \
+             patch.dict(os.environ, {"ARAYFLOW_CHROME_BROWSER_URL": "http://127.0.0.1:9222"}):
+            _command, args = server_command()
+        joined = " ".join(args)
+        self.assertIn("--browserUrl http://127.0.0.1:9222", joined)
+        self.assertNotIn("--autoConnect", joined)
 
     def test_node_missing_has_actionable_error(self):
         with patch("existing_chrome.shutil.which", return_value=None):

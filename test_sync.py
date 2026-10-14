@@ -134,10 +134,20 @@ class SyncTests(unittest.TestCase):
     def test_protect_declared_posts(self):
         old = "arayflow/2026-10-14/ARAY-20261014-001/ARAY-20261014-001_slide-01.png"
         removable, protected = classify(
-            [old], {self.asset["key"]}, {"ARAY-20261014-001"}, set()
+            [old], {self.asset["key"]}, {"ARAY-20261014-001"}, set(), self.day,
         )
         self.assertEqual(removable, [])
         self.assertEqual(protected, [old])
+
+    def test_future_day_is_not_deleted(self):
+        future = "arayflow/2026-10-16/ARAY-20261016-001/ARAY-20261016-001_slide-01.png"
+        past = "arayflow/2026-10-14/ARAY-20261014-009/ARAY-20261014-009_slide-01.png"
+        self.fake.objects[future] = {}
+        self.fake.objects[past] = {}
+        plan = make_plan(self.r2, self.store, self.day, [self.asset])
+        self.assertIn(future, plan["protected"])
+        self.assertNotIn(future, plan["delete"])
+        self.assertIn(past, plan["delete"])
 
 if __name__ == "__main__":
     unittest.main()

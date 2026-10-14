@@ -13,6 +13,7 @@ import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from publication_store import PublicationStore
 
@@ -32,6 +33,31 @@ UPLOAD_TERMS = re.compile(
 )
 
 
+def chrome_connection_args() -> list[str]:
+    """Porta local explicita por padrao. 'auto' preserva a descoberta --autoConnect."""
+    raw = os.getenv("ARAYFLOW_CHROME_BROWSER_URL", "http://127.0.0.1:9222").strip()
+    if raw.casefold() in {"auto", "autoconnect"}:
+        return ["--autoConnect"]
+    parsed = urlsplit(raw)
+    host = (parsed.hostname or "").casefold()
+    if (parsed.scheme != "http" or host not in {"127.0.0.1", "localhost"}
+            or parsed.port is None or parsed.username or parsed.password
+            or parsed.query or parsed.fragment or parsed.path not in {"", "/"}):
+        raise ValueError(
+            "ARAYFLOW_CHROME_BROWSER_URL aceita http://127.0.0.1:9222, "
+            "http://localhost:9222 ou auto"
+        )
+    return ["--browserUrl", f"http://{host}:{parsed.port}"]
+
+
+def _mcp_invocation() -> list[str]:
+    return [
+        "npx", "--yes", "chrome-devtools-mcp@latest",
+        *chrome_connection_args(),
+        "--no-usage-statistics", "--no-performance-crux",
+    ]
+
+
 def server_command() -> tuple[str, list[str]]:
     """Chrome DevTools MCP precisa de Node.js/npx local, nao de Chromium."""
     if not shutil.which("node"):
@@ -39,19 +65,17 @@ def server_command() -> tuple[str, list[str]]:
             "Node.js nao encontrado. Instale Node.js 22+ (inclui npx), "
             "abra novo PowerShell e confira 'node -v' e 'npx -v'."
         )
+    invocation = _mcp_invocation()
     if os.name == "nt":
         if not (shutil.which("npx.cmd") or shutil.which("npx")):
             raise RuntimeError("npx nao encontrado. Reinstale Node.js 22+.")
         return os.environ.get("COMSPEC", "cmd.exe"), [
-            "/d", "/s", "/c",
-            "npx --yes chrome-devtools-mcp@latest --autoConnect "
-            "--no-usage-statistics --no-performance-crux",
+            "/d", "/s", "/c", " ".join(invocation),
         ]
     npx = shutil.which("npx")
     if not npx:
         raise RuntimeError("npx nao encontrado. Instale Node.js 22+.")
-    return npx, ["--yes", "chrome-devtools-mcp@latest", "--autoConnect",
-                 "--no-usage-statistics", "--no-performance-crux"]
+    return npx, invocation[1:]
 
 
 def extract_text(result) -> str:
@@ -217,10 +241,15 @@ async def diagnose_chrome_connection() -> None:
         raise RuntimeError("SDK MCP ausente: execute pip install -r requirements.txt") from exc
 
     command, args = server_command()
+    endpoint = chrome_connection_args()
     print("[DIAGNOSTICO] Chrome 144 ou mais recente deve estar aberto.")
     print("[DIAGNOSTICO] Em chrome://inspect/#remote-debugging, a opcao")
     print("    'Allow remote debugging for this browser instance' precisa estar marcada.")
     print("    A pagina mostra 'Server running at: 127.0.0.1:9222' quando esta pronta.")
+    if endpoint == ["--autoConnect"]:
+        print("[DIAGNOSTICO] Modo auto: o MCP escolhe o perfil sozinho.")
+    else:
+        print(f"[DIAGNOSTICO] Conexao explicita: {endpoint[1]}")
     print("[DIAGNOSTICO] O Chrome pedira sua autorizacao de conexao.")
     if input("Digite DIAGNOSTICAR CHROME para conectar sem agendar: ").strip() != "DIAGNOSTICAR CHROME":
         print("[CANCELADO] Nenhuma conexao iniciada.")
@@ -264,7 +293,9 @@ async def schedule_existing_chrome(rows: list[dict], drive, ledger, db_file: Pat
         "\n[CHROME PESSOAL] No Chrome onde a Meta JA esta logada, abra "
         "chrome://inspect/#remote-debugging e marque "
         "'Allow remote debugging for this browser instance'. "
-        "Com a opcao ligada, a pagina mostra Server running at: 127.0.0.1:9222."
+        "Com a opcao ligada, a pagina mostra Server running at: 127.0.0.1:9222. "
+        "O ArayFlow conecta nesse endereco. Para a descoberta automatica, "
+        "defina ARAYFLOW_CHROME_BROWSER_URL=auto no .env."
     )
     print(
         "[SEGURANCA] Autorize a conexao solicitada PELO Chrome somente "

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import socket
 import sys
 from collections import defaultdict
@@ -20,7 +21,7 @@ from r2_storage import R2Storage
 from sync_store import SyncStore
 
 from arayflow.editorial import load_sheet_rows
-from arayflow.local_media import images_for, sha256_file
+from arayflow.local_media import images_for, require_slide_sequence, sha256_file
 from arayflow.settings import DB_PATH, POST_ID_RE
 
 IGNORED_STATUSES = {"cancelado", "cancelada", "rejeitado", "rejeitada", "publicado", "publicada"}
@@ -74,6 +75,7 @@ def make_assets(day: str, posts: list[dict], storage: R2Storage) -> list[dict]:
         paths = images_for(post_id)
         if len(paths) != expected:
             raise ValueError(f"{post_id}: esperadas {expected} imagens locais; encontradas {len(paths)}. Execute main.py --download")
+        require_slide_sequence(paths, expected, post_id)
         validate_batch(paths)
         if not post.get("Legenda pronta", "").strip():
             raise ValueError(f"{post_id}: legenda vazia")
@@ -89,15 +91,18 @@ def make_assets(day: str, posts: list[dict], storage: R2Storage) -> list[dict]:
     return planned
 
 def classify(remote: list[str], desired_keys: set[str],
-             protected_posts: set[str], protected_days: set[str]) -> tuple[list[str], list[str]]:
-    """Retorna (excluiveis, protegidos); assume inventario ja filtrado por R2Storage."""
+             protected_posts: set[str], protected_days: set[str],
+             selected_day: str) -> tuple[list[str], list[str]]:
+    """Retorna (excluiveis, protegidos). Dias futuros nunca entram na exclusão."""
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", selected_day):
+        raise ValueError("Dia da sincronizacao invalido")
     old = []
     protected = []
     for key in remote:
         if key in desired_keys:
             continue
         _, day, post_id, _ = key.split("/")
-        if day in protected_days or post_id in protected_posts:
+        if day > selected_day or day in protected_days or post_id in protected_posts:
             protected.append(key)
         else:
             old.append(key)
@@ -108,7 +113,7 @@ def make_plan(storage: R2Storage, store: SyncStore, day: str, assets: list[dict]
     remote_set = set(remote)
     desired_keys = {a["key"] for a in assets}
     delete, protected = classify(remote, desired_keys, store.protected_posts(),
-                                  store.protected_days(day))
+                                  store.protected_days(day), day)
     uploads, reuse = [], []
     for a in assets:
         if a["key"] in remote_set and storage.remote_sha256(a["key"]) == a["sha256"]:

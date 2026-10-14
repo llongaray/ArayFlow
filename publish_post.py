@@ -15,7 +15,7 @@ from instagram_publisher import InstagramPublisher
 from publication_store import PublicationStore
 
 from arayflow.editorial import APPROVED, load_sheet_rows
-from arayflow.local_media import images_for
+from arayflow.local_media import images_for, require_slide_sequence
 from arayflow.settings import DB_PATH, POST_ID_RE
 
 def load_post(post_id: str):
@@ -46,6 +46,7 @@ def main():
     expected = int(post["Qtd. imagens"])
     if len(images) != expected:
         raise ValueError(f"Esperadas {expected} imagens baixadas; encontradas {len(images)}. Execute main.py --download")
+    require_slide_sequence(images, expected, args.post)
     reports = validate_batch(images)
     caption = post.get("Legenda pronta","").strip()
     if not caption:

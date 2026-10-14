@@ -24,10 +24,10 @@ from google_client import BASE_DIR, authenticate, services
 from r2_storage import R2Storage
 
 from arayflow.editorial import APPROVED, decision, load_sheet_rows
+from arayflow.local_media import images_for, slide_number
 from arayflow.settings import POST_ID_RE, ZONE, autopublish_enabled, spreadsheet_url
 
 load_dotenv(BASE_DIR / ".env")
-SLIDE_NAME = re.compile(r"ARAY-\d{8}-\d{3,}_slide-(\d+)\.(png|jpg|jpeg)$", re.I)
 TASK_NAME = "ArayFlow Publisher"
 CACHE_SECONDS = 45
 
@@ -43,17 +43,7 @@ def parse_day(value: str | None) -> str:
 def slides_for(root: Path, post_id: str) -> list[Path]:
     if not POST_ID_RE.fullmatch(post_id):
         return []
-    day = datetime.strptime(post_id[5:13], "%Y%m%d").date().isoformat()
-    folder = root / "downloads" / day / post_id
-    if not folder.is_dir():
-        return []
-    slides = []
-    for item in folder.iterdir():
-        match = SLIDE_NAME.fullmatch(item.name)
-        if (item.is_file() and match and item.name.startswith(post_id + "_slide-")
-                and 1 <= int(match[1]) <= 10):
-            slides.append((int(match[1]), item))
-    return [path for _, path in sorted(slides)]
+    return [path for path in images_for(post_id, root) if 1 <= slide_number(path.name) <= 10]
 
 
 def snapshot(root: Path):

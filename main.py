@@ -5,21 +5,13 @@ Não publica na Meta.
 from __future__ import annotations
 
 import argparse
-import re
 import sys
 from datetime import datetime, timedelta
-from pathlib import Path
 
-from google_client import (
-    authenticate,
-    download_image,
-    extract_folder_id,
-    list_images,
-    local_path,
-    services,
-)
+from google_client import authenticate, services
 
 from arayflow.editorial import load_sheet_rows
+from arayflow.local_media import checked_remote, ensure_local
 from arayflow.settings import ZONE
 
 DATE_FORMAT = "%d/%m/%Y"
@@ -62,30 +54,20 @@ def main() -> int:
         return 0
 
     issues = 0
-    day_folder = datetime.strptime(selected_date, DATE_FORMAT).strftime("%Y-%m-%d")
     for post in selected:
         ident = post.get("ID", "?").strip()
         print(f"\n{post.get('Horário', '?').strip()} | {ident} | {post.get('Tipo', '').strip()} | {post.get('Status', '')}")
         try:
-            expected = int(post.get("Qtd. imagens", ""))
-            if expected < 1:
-                raise ValueError("Quantidade de imagens inválida")
-            files = list_images(drive, extract_folder_id(post.get("Pasta das imagens", "")))
-            print(f"    Imagens: esperadas={expected} encontradas={len(files)}")
-            for item in files:
-                print(f"      - {item['name']}")
-            if len(files) != expected:
-                raise ValueError("Quantidade de imagens diferente da planilha.")
-            if not post.get("Legenda pronta", "").strip():
-                raise ValueError("Legenda vazia.")
             if args.download:
-                safe_id = re.sub(r"[^A-Za-z0-9_-]+", "_", ident)
-                dest_folder = local_path("DOWNLOAD_DIR", "downloads") / day_folder / safe_id
-                for item in files:
-                    dest = dest_folder / Path(item["name"]).name
-                    download_image(drive, item, dest)
-                    print(f"    [BAIXADO] {dest}")
+                paths = ensure_local(post, drive)
+                print(f"    Imagens: esperadas={len(paths)} encontradas={len(paths)}")
+                for path in paths:
+                    print(f"    [BAIXADO] {path}")
             else:
+                files = checked_remote(post, drive)
+                print(f"    Imagens: esperadas={len(files)} encontradas={len(files)}")
+                for item in files:
+                    print(f"      - {item['name']}")
                 print("    [OK] Verificado; nenhuma imagem baixada (modo de leitura).")
         except Exception as exc:
             issues += 1
