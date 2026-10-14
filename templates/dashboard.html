@@ -125,12 +125,12 @@
       {% endif %}
 
       <section class="section" id="business-suite">
-        <div class="heading"><div><div class="overline">v0.7.2 · CHROME EXISTENTE</div><h2>Assistente Business Suite</h2></div><span class="tag">Navegador visível</span></div>
+        <div class="heading"><div><div class="overline">v0.7.3 · CHROME EXISTENTE</div><h2>Assistente Business Suite</h2></div><span class="tag">Navegador visível</span></div>
         <div class="suite-layout">
           <div class="panel suite-primary">
             <div class="suite-badge">FLUXO ASSISTIDO</div>
             <h3>Agende o dia inteiro em uma sessão.</h3>
-            <p>Você pode reutilizar as abas e o login do Chrome que já está aberto, sem criar outro perfil. O modo assistido tenta preencher artes e legenda no compositor, quando identifica os campos com segurança. Você confere o horário e clica em <strong>Agendar</strong> no Business Suite. O sistema só registra a confirmação após sua validação.</p>
+            <p>Você pode reutilizar as abas e o login do Chrome que já está aberto, sem criar outro perfil. O assistente tenta preencher imagens, legenda, data e horário quando identifica os campos com segurança. Você confere a conta, o fuso e os dados e clica em <strong>Agendar</strong> no Business Suite. O sistema só registra a confirmação após sua validação.</p>
             {% if autopublish %}<div class="notification error">A automação pela Graph API está AUTORIZADA no .env. Antes de usar o assistente Playwright, altere <code>ARAYFLOW_AUTOPUBLISH_ENABLED=false</code> e pause a tarefa Windows para evitar duplicatas.</div>{% endif %}
             {% if not autopublish and task_state not in ['Ready','Running','Queued'] %}
             <form action="{{ url_for('start_business_suite') }}" method="post" class="start-form">
@@ -140,7 +140,7 @@
               <input type="hidden" name="browser" value="existing">
               <button class="button primary" type="submit">◈ Conectar ao meu Chrome já aberto (logado)</button>
             </form>
-            <p class="support-note"><strong>Antes de conectar:</strong> no Chrome onde seu Facebook já está logado, abra <code>chrome://inspect/#remote-debugging</code> e habilite o acesso de depuração remota. A conexão pede autorização no Chrome. Requer Chrome 144+ e Node.js 22+ instalado. Esse acesso pode alcançar outras abas do seu perfil; autorize somente o ArayFlow.</p>
+            <p class="support-note"><strong>Antes de conectar:</strong> deixe o compositor e os campos de Programar abertos; no Chrome onde seu Facebook já está logado, abra <code>chrome://inspect/#remote-debugging</code> e habilite o acesso de depuração remota. A conexão pede autorização no Chrome. Requer Chrome 144+ e Node.js 22+ instalado. Esse acesso pode alcançar outras abas do seu perfil; autorize somente o ArayFlow.</p>
             <form action="{{ url_for('start_business_suite') }}" method="post" class="start-form isolated-form">
               <input type="hidden" name="csrf" value="{{ csrf_start }}">
               <input type="hidden" name="date" value="{{ day }}">
@@ -153,7 +153,7 @@
             {% endif %}
             <div class="cli"><code id="suite-command">python business_suite_assistant.py --date {{ day }} --start --browser existing</code><button type="button" class="copy-button" data-copy-target="suite-command">Copiar comando</button></div>
             <div class="cli secondary-cli"><code id="suite-status-command">python business_suite_assistant.py --status</code><button type="button" class="copy-button" data-copy-target="suite-status-command">Copiar</button></div>
-            <p class="support-note">Execute o comando no PowerShell com o <code>.venv</code> ativo. O assistente não clica no botão final nem tenta contornar autenticação. Não precisa deixar o computador ligado após confirmar os posts no Business Suite.</p>
+            <p class="support-note">Antes de iniciar um lote, execute <code>python business_suite_assistant.py --inspect-composer</code> para conferir quais campos são reconhecidos, sem alterar nada. O assistente não clica no botão final nem tenta contornar autenticação. Não precisa deixar o computador ligado após confirmar os posts no Business Suite.</p>
           </div>
           <div class="panel suite-steps">
             <h3>Como funciona</h3>
