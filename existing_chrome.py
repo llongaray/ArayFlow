@@ -559,6 +559,55 @@ async def inspect_existing_composer() -> None:
         ) from exc
 
 
+async def test_schedule_fields_in_existing_chrome(when: datetime) -> None:
+    """Teste de formulario somente, sem Google Sheets, ledger ou uploads.
+
+    Exige autorizacao de navegacao e outra para alterar apenas os tres
+    campos de agendamento. O botao final permanece intocado.
+    """
+    try:
+        from mcp import ClientSession, StdioServerParameters
+        from mcp.client.stdio import stdio_client
+    except ImportError as exc:
+        raise RuntimeError("SDK MCP ausente: execute pip install -r requirements.txt") from exc
+    if when <= datetime.now(ZONE):
+        raise ValueError("Data/hora para teste precisa estar no futuro")
+    print("[TESTE] Apenas campos de data/hora; nenhuma planilha, imagem ou SQLite.")
+    print("[TESTE] Deixe o compositor aberto, @aray_solucoes selecionado")
+    print("e 'Definir data e hora' ligado, com os campos visiveis.")
+    if input("Digite TESTAR CAMPOS para conectar: ").strip() != "TESTAR CAMPOS":
+        print("[CANCELADO] Nenhum campo alterado.")
+        return
+    command, args = server_command()
+    params = StdioServerParameters(command=command, args=args)
+    try:
+        async with stdio_client(params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                bridge = ChromeMCP(session)
+                page_id = await bridge.meta_page(create_if_missing=False)
+                await bridge.assert_meta_page(page_id)
+                print(f"[TESTE] Valor desejado: {when:%d/%m/%Y %H:%M} "
+                      "(America/Sao_Paulo).")
+                if input("Digite PREENCHER DATA E HORA para executar: ").strip() != "PREENCHER DATA E HORA":
+                    print("[CANCELADO] Nenhum campo alterado.")
+                    return
+                result = await bridge.call(
+                    "evaluate_script", pageId=page_id,
+                    function=schedule_fill_js(when), waitForStableDom=False,
+                )
+                verified, status = interpret_schedule_fill(result)
+                if verified:
+                    print("[OK] Data/hora conferidas no DOM; revise visualmente no Meta.")
+                else:
+                    print(f"[MANUAL] Campos nao confirmados ({status}). "
+                          "Verifique e corrija visualmente.")
+                print("[SEGURO] Nao clicamos em Programar/Publicar e nenhum status foi salvo.")
+    except Exception as exc:
+        raise RuntimeError("Teste dos campos Meta falhou: "
+                           + connection_failure_details(exc)) from exc
+
+
 async def schedule_existing_chrome(rows: list[dict], drive, ledger, db_file: Path) -> None:
     """Vincula somente apos consentimento explicito; nao acessa credenciais."""
     try:
