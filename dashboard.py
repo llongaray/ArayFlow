@@ -5,7 +5,6 @@ Apenas a pausa/retomada explicita da tarefa Windows realiza uma modificacao.
 """
 from __future__ import annotations
 
-import hmac
 import os
 import re
 import secrets
@@ -20,7 +19,8 @@ from threading import Lock
 from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
-from flask import Flask, abort, flash, redirect, render_template, request, send_file, session, url_for
+from flask import Flask, abort, flash, redirect, render_template, request, send_file, url_for
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
 from google_client import BASE_DIR, authenticate, read_calendar, services
 from r2_storage import R2Storage
@@ -169,6 +169,27 @@ def create_app(root: Path | None = None) -> Flask:
     app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Strict")
     cache_lock = Lock()
     cache = {"at": 0., "rows": None}
+    # Token CSRF autocontido e assinado. Nao depende de cookies de sessao,
+    # que podem ser limpos/bloqueados entre o GET do painel e o POST.
+    csrf_signer = URLSafeTimedSerializer(app.secret_key, salt="arayflow-actions-v1")
+
+    def action_token(action: str) -> str:
+        return csrf_signer.dumps({"action": action})
+
+    def require_action_token(action: str) -> None:
+        raw = request.form.get("csrf", "")
+        try:
+            signed = csrf_signer.loads(raw, max_age=900)
+        except (BadSignature, SignatureExpired, TypeError, ValueError):
+            app.logger.warning("Acao %s negada: token ausente, invalido ou expirado", action)
+            abort(403, description="Sessao do formulario expirada. Volte ao painel, atualize a pagina e tente novamente.")
+        if signed != {"action": action}:
+            app.logger.warning("Acao %s negada: token pertence a outra acao", action)
+            abort(403, description="Token nao corresponde a esta acao.")
+        origin = request.headers.get("Origin")
+        if origin and origin != request.host_url.rstrip("/"):
+            app.logger.warning("Acao %s negada: origem diferente do painel local", action)
+            abort(403, description="A origem da requisicao nao corresponde ao painel local.")
 
     def cached_rows(force=False):
         with cache_lock:
@@ -244,13 +265,14 @@ def create_app(root: Path | None = None) -> Flask:
             except Exception:
                 app.logger.exception("Falha ao consultar R2")
                 r2_error = "Falha ao consultar R2. Verifique credenciais/conexao."
-        csrf = session.setdefault("csrf", secrets.token_urlsafe(32))
         previous_day = (selected_date - timedelta(days=1)).isoformat()
         next_day = (selected_date + timedelta(days=1)).isoformat()
         return render_template(
             "dashboard.html", day=day, today=datetime.now(ZONE).date().isoformat(),
             previous_day=previous_day, next_day=next_day, posts=posts, selected_post=selected_post,
-            slides=slides, db=db, logs=safe_log_lines(root), csrf=csrf, google_error=google_error,
+            slides=slides, db=db, logs=safe_log_lines(root),
+            csrf_pause=action_token("pause"), csrf_resume=action_token("resume"),
+            csrf_start=action_token("business-suite-start"), google_error=google_error,
             task_state=task_state(), autopublish=os.getenv("ARAYFLOW_AUTOPUBLISH_ENABLED", "").lower() == "true",
             remote_count=count_remote, r2_error=r2_error,
             approved=sum(p["approved"] for p in posts),
@@ -278,13 +300,7 @@ def create_app(root: Path | None = None) -> Flask:
 
     @app.post("/business-suite/start")
     def start_business_suite():
-        expected = session.get("csrf", "")
-        received = request.form.get("csrf", "")
-        if not expected or not received or not hmac.compare_digest(received, expected):
-            abort(403)
-        origin = request.headers.get("Origin")
-        if origin and origin not in {"http://127.0.0.1:8766", "http://localhost:8766"}:
-            abort(403)
+        require_action_token("business-suite-start")
         if request.form.get("confirmation", "") != "ABRIR":
             abort(400)
         try:
@@ -321,13 +337,7 @@ def create_app(root: Path | None = None) -> Flask:
     def scheduler_action(action):
         if action not in {"pause", "resume"}:
             abort(404)
-        expected = session.get("csrf", "")
-        received = request.form.get("csrf", "")
-        if not expected or not received or not hmac.compare_digest(received, expected):
-            abort(403)
-        origin = request.headers.get("Origin")
-        if origin and origin not in {"http://127.0.0.1:8766", "http://localhost:8766"}:
-            abort(403)
+        require_action_token(action)
         if request.form.get("confirmation") != ("PAUSAR" if action == "pause" else "RETOMAR"):
             flash("Confirmacao invalida; nenhuma alteracao realizada.", "error")
         else:
