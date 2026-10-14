@@ -21,7 +21,7 @@ from arayflow.editorial import scheduled_time
 from arayflow.local_media import ensure_local
 from arayflow.settings import ZONE
 from business_suite_forms import (
-    discover_fields, field_report, plan_form_values, validate_media_files,
+    discover_fields, field_report, plan_form_values, safe_composer_hints, validate_media_files,
 )
 
 META_URL = "https://business.facebook.com/"
@@ -449,18 +449,30 @@ async def inspect_existing_composer() -> None:
                 await session.initialize()
                 bridge = ChromeMCP(session)
                 page_id = await bridge.meta_page(create_if_missing=True)
-                print("[INSPECAO] Na aba Meta, selecione @aray_solucoes, abra")
-                print("'Criar publicacao' e deixe Data e Horario visiveis.")
-                if input("Quando o compositor estiver pronto, digite PRONTO: ").strip() != "PRONTO":
+                print("[INSPECAO] Selecione @aray_solucoes, abra 'Criar post'")
+                print("e ATIVE o botao 'Definir data e hora' na secao Programar.")
+                print("A inspecao nao ativa esse botao por ser somente leitura.")
+                if input("Quando TODOS os campos estiverem visiveis, digite PRONTO: ").strip() != "PRONTO":
                     print("[CANCELADO] Nenhuma alteracao feita.")
                     return
                 await bridge.assert_meta_page(page_id)
-                fields = discover_fields(await bridge.call("take_snapshot", pageId=page_id))
+                snapshot = await bridge.call("take_snapshot", pageId=page_id)
+                fields = discover_fields(snapshot)
                 for name, found in field_report(fields).items():
                     print(f"[CAMPO] {name}: {'IDENTIFICADO' if found else 'MANUAL'}")
+                hints = safe_composer_hints(snapshot)
+                print("[ESTRUTURA] Botao Adicionar foto/video: "
+                      + ("SIM" if hints["add_media_button"] else "NAO IDENTIFICADO"))
+                print(f"[ESTRUTURA] Caixas de texto com UID: {hints['textbox_controls']}; "
+                      f"sem rotulo: {hints['unlabelled_textboxes']}")
+                print("[ESTRUTURA] Definir data e hora visivel: "
+                      + ("SIM" if hints["schedule_switch_present"] else "NAO IDENTIFICADO"))
                 if fields.ambiguous:
                     print("[AMBIGUO] " + ", ".join(fields.ambiguous))
-                print("[OK] Inspecao sem alterar formulario, planilha ou SQLite.")
+                if not fields.date_uid or not fields.time_uid:
+                    print("[INFO] Confira se 'Definir data e hora' foi ATIVADO. "
+                          "Campos escondidos nao podem ser preenchidos.")
+                print("[OK] Inspecao sem enviar imagens, alterar campos ou reservar posts.")
     except Exception as exc:
         raise RuntimeError(
             "Falha ao inspecionar campos: " + connection_failure_details(exc)
