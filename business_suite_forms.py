@@ -22,7 +22,7 @@ _DATE_TIME_ROLES = frozenset({"textbox", "input", "textarea", "combobox"})
 _UPLOAD_ROLES = frozenset({"button", "input", "file", "generic"})
 
 _CAPTION = re.compile(
-    r"^(?:legenda|escreva (?:uma |a )?legenda|adicionar legenda|"
+    r"^(?:texto|legenda|escreva (?:uma |a )?legenda|adicionar legenda|"
     r"texto da publica[cç][aã]o|caption|write (?:a )?caption|post caption)$", re.I
 )
 _DATE = re.compile(
@@ -40,6 +40,8 @@ _TIME = re.compile(
 _UPLOAD = re.compile(
     r"^(?:adicionar|carregar|enviar|selecionar|escolher|anexar)"
     r" (?:fotos?|imagens?|m[ií]dias?|arquivos?)$|"
+    r"^(?:adicionar|carregar|enviar) fotos?/v[ií]deos?$|"
+    r"^(?:adicionar|carregar|enviar) fotos? (?:e|ou) v[ií]deos?$|"
     r"^(?:add|upload|select|choose|attach) (?:photos?|images?|media|files?)$|"
     r"^(?:upload|carregar) (?:arquivo|file)$", re.I
 )
@@ -142,4 +144,30 @@ def field_report(fields: FormFields) -> dict[str, bool]:
         "caption": fields.caption_uid is not None,
         "date": fields.date_uid is not None,
         "time": fields.time_uid is not None,
+    }
+
+
+def safe_composer_hints(snapshot: str) -> dict[str, object]:
+    """Diagnostico de campos SEM imprimir titulos, textos, URLs ou IDs do DOM.
+
+    Os contadores ajudam quando o rótulo 'Texto' aparece separado do textbox
+    ou o painel Programar ainda esta fechado.
+    """
+    lines = snapshot.splitlines()
+    labels = [control.label for control in parse_controls(snapshot)]
+    return {
+        "add_media_button": any(_UPLOAD.fullmatch(label) for label in labels),
+        "text_label": any(label.casefold() == "texto" for label in labels)
+            or any(re.search(r"(?i)^\\s*(?:[-*]\\s*)?(?:text: )?Texto\\s*$", line)
+                   for line in lines),
+        "schedule_switch_present": any("definir data e hora" in line.casefold()
+                                       for line in lines),
+        "textbox_controls": sum(bool(re.search(r"\\btextbox\\b", line))
+                                 and bool(re.search(r"\\buid=\\d+_\\d+\\b", line))
+                                 for line in lines),
+        "unlabelled_textboxes": sum(
+            bool(re.search(r"\\buid=\\d+_\\d+\\s+textbox\\b", line))
+            and not bool(re.search(r'\\btextbox\\s+"', line))
+            for line in lines
+        ),
     }
