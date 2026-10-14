@@ -549,3 +549,23 @@ Se visualizar `403 Forbidden`:
 
 Depois de `git pull origin main`, **reinicie o servidor Flask** para que
 a correcao seja carregada. Nenhum token, senha ou cookie foi publicado no Git.
+
+
+### Correcao adicional: botao do Business Suite com HTTP 403 de Origin
+
+Algumas combinacoes de navegador/localizacao apresentam `Origin` com
+`localhost:8766` enquanto o painel Flask esta aberto em
+`127.0.0.1:8766` (ou vice-versa). A verificacao anterior usava
+`request.host_url` como unica referencia e recusava a operacao.
+
+Agora os formularios assinados do ArayFlow aceitam **exclusivamente**
+`http://localhost:8766` e `http://127.0.0.1:8766`, conservando a
+verificacao CSRF de 15 minutos. Requisicoes de sites externos nao sao
+autorizadas. Quando houver bloqueio, o terminal do Flask registra a
+origem recebida e o host requisitado, sem divulgar tokens de autorizacao.
+
+Para atualizar, interrompa o Flask com `Ctrl+C`, execute `git pull origin main`,
+`python -m unittest test_business_suite -v`, reinicie com
+`python dashboard.py` e atualize a pagina com `Ctrl+F5`. O botão
+**Abrir assistente do Business Suite** volta a funcionar somente com
+`ARAYFLOW_AUTOPUBLISH_ENABLED=false` e a tarefa Windows desativada.
