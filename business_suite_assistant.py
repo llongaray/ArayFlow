@@ -1,4 +1,4 @@
-"""ArayFlow v0.7: assistente VISIVEL de agendamento no Meta Business Suite.
+"""ArayFlow v0.7.1: assistente VISIVEL no Google Chrome instalado.
 
 O Playwright ajuda no upload e legenda, mas a data/hora, conta Instagram e
 botao final AGENDAR devem ser conferidos e acionados pelo operador.
@@ -26,7 +26,7 @@ load_dotenv(BASE_DIR / ".env")
 ZONE = ZoneInfo("America/Sao_Paulo")
 POST_RE = re.compile(r"ARAY-\d{8}-\d{3,}$")
 DB_FILE = BASE_DIR / "data" / "arayflow.sqlite3"
-PROFILE_DIR = BASE_DIR / "data" / "playwright_meta_profile"
+PROFILE_DIR = BASE_DIR / "data" / "playwright_chrome_profile"
 CAPTION_LABELS = re.compile(
     r"legenda|escreva uma legenda|caption|write a caption|descri[cç][aã]o do post",
     re.I
@@ -163,30 +163,61 @@ def manual_schedule(page, row: dict, images: list[Path], ledger: BusinessSuiteSt
         raise
 
 
+def launch_chrome_context(playwright, profile_dir: Path = PROFILE_DIR):
+    """Usa Google Chrome instalado e um perfil SEPARADO do Chrome pessoal.
+
+    A pasta permanece entre execucoes (login/cookies locais, quando validos).
+    Nunca anexa a janela pessoal aberta ou ao perfil Default do usuario.
+    """
+    profile_dir = Path(profile_dir)
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        return playwright.chromium.launch_persistent_context(
+            user_data_dir=str(profile_dir),
+            channel="chrome",
+            headless=False,
+            viewport={"width": 1440, "height": 900},
+            accept_downloads=False,
+        )
+    except Exception as exc:
+        details = str(exc).lower()
+        if ("executable doesn't exist" in details
+                or "executable does not exist" in details
+                or ("chrome" in details and ("not found" in details or "not installed" in details))):
+            raise RuntimeError(
+                "Google Chrome nao encontrado. Instale o Google Chrome oficial no Windows "
+                "e tente novamente. O Chromium do Playwright nao e necessario."
+            ) from exc
+        if any(fragment in details for fragment in (
+                "processsingleton", "profile appears to be in use", "user data directory is already in use")):
+            raise RuntimeError(
+                "O perfil exclusivo do ArayFlow ja esta aberto. Feche a janela "
+                "do Chrome iniciada anteriormente pelo ArayFlow e tente novamente."
+            ) from exc
+        raise
+
+
 def start_browser(rows: list[dict], drive, ledger: BusinessSuiteStore):
     try:
         from playwright.sync_api import sync_playwright
     except ImportError as exc:
         raise RuntimeError(
-            "Playwright nao instalado. Execute python -m pip install -r requirements.txt "
-            "e python -m playwright install chromium no .venv."
+            "Playwright nao instalado. No .venv, execute: "
+            "python -m pip install -r requirements.txt. "
+            "Nao precisa instalar o Chromium do Playwright."
         ) from exc
 
-    PROFILE_DIR.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as playwright:
-        context = playwright.chromium.launch_persistent_context(
-            user_data_dir=str(PROFILE_DIR), headless=False,
-            viewport={"width": 1440, "height": 900},
-            accept_downloads=False,
-        )
+        context = launch_chrome_context(playwright)
         try:
             page = context.pages[0] if context.pages else context.new_page()
             try:
                 page.goto("https://business.facebook.com/", wait_until="domcontentloaded", timeout=45_000)
             except Exception:
                 print("[AVISO] Nao foi possivel carregar a pagina inicial. Verifique a conexao.")
-            print("Navegador visivel iniciado; faca login e MFA manualmente, se necessario.")
-            print("Sessao isolada em data/playwright_meta_profile (ignorada no Git).")
+            print("Google Chrome instalado iniciado; faca login e MFA manualmente, se necessario.")
+            print("Sessao persistente: data/playwright_chrome_profile (ignorada no Git).")
+            print("O Chrome pessoal aberto nao e controlado nem tem seus cookies copiados.")
             api = PublicationStore(DB_FILE)
             try:
                 for row in rows:
