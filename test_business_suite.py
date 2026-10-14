@@ -87,7 +87,7 @@ class MetaSuiteTests(unittest.TestCase):
         store.close()
         app = create_app(root=self.root)
         app.config["TESTING"] = True
-        with patch("dashboard.get_calendar", return_value=[row]), \\
+        with patch("dashboard.get_calendar", return_value=[row]), \
              patch("dashboard.task_state", return_value="Ready"):
             response = app.test_client().get("/?date=2026-10-14",
                                               headers={"Host": "localhost"})
