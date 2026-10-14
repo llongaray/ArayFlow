@@ -16,6 +16,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from business_suite_dom_probe import READ_ONLY_SCHEDULE_JS, format_dom_probe
+from business_suite_schedule_fill import interpret_schedule_fill, schedule_fill_js
 from publication_store import PublicationStore
 
 from arayflow.editorial import scheduled_time
@@ -337,6 +338,41 @@ class ChromeMCP:
             except Exception:
                 print("[AVISO] O formulario pode ter sido parcialmente alterado. "
                       "Confira TODOS os campos manualmente antes de agendar.")
+        # A Meta pode usar inputs separados em um calendario customizado.
+        # Esta tentativa requer opt-in por ambiente E autorizacao por post.
+        if when is not None and not (outcome["date"] and outcome["time"]):
+            enabled = os.getenv("ARAYFLOW_SUITE_SCHEDULE_PREFILL", "false").strip().lower()
+            if enabled in {"true", "1", "yes", "sim"}:
+                print(f"[EXPERIMENTAL] Data: {when:%d/%m/%Y}; horario: {when:%H:%M}.")
+                print("[EXPERIMENTAL] So prossegue se encontrar UM input de data,")
+                print("UMA hora (0-23) e UM minuto (0-59) no compositor da Meta.")
+                confirmation = input(
+                    "Autorizar a alteracao dos tres campos? "
+                    "Digite PREENCHER DATA E HORA (ou Enter para manual): "
+                ).strip()
+                if confirmation == "PREENCHER DATA E HORA":
+                    try:
+                        await self.assert_meta_page(page_id)
+                        result = await self.call(
+                            "evaluate_script", pageId=page_id,
+                            function=schedule_fill_js(when),
+                            waitForStableDom=False,
+                        )
+                        verified, status = interpret_schedule_fill(result)
+                        if verified:
+                            outcome["date"] = outcome["time"] = True
+                            print("[DOM] Data e hora conferidas nos campos da pagina.")
+                        else:
+                            print(f"[DOM] Tentativa nao confirmada ({status}). "
+                                  "Verifique visualmente; ajuste manualmente.")
+                    except Exception:
+                        print("[DOM] Nao foi possivel conferir o preenchimento. "
+                              "Verifique campos manualmente.")
+                else:
+                    print("[MANUAL] Data e hora permanecem para ajuste pelo operador.")
+            else:
+                print("[MANUAL] Preenchimento de data/hora por DOM permanece desligado.")
+                print("[MANUAL] Para habilitar, defina ARAYFLOW_SUITE_SCHEDULE_PREFILL=true.")
         print("[REVISAO] MCP nao clicou em Publicar ou Agendar. "
               "Data, horario, conta, imagens e legenda exigem verificacao visual.")
         return outcome
