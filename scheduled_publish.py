@@ -187,9 +187,9 @@ def prepare_post(row: dict, store: PublicationStore, publisher: InstagramPublish
     try:
         publisher.check_account()
         cid = publisher.prepare(urls, row["Legenda pronta"].strip())
-    except Exception:
+    except Exception as exc:
         LOG.exception("%s: resultado incerto na preparacao; conferir manualmente", post_id)
-        return False
+        raise RuntimeError(f"{post_id}: preparacao incerta; sessao 'preparing' bloqueada para revisao") from exc
     if not store.transition(post_id, "preparing", "prepared", container_id=cid):
         raise RuntimeError(f"{post_id}: estado alterado durante preparacao")
     LOG.info("%s: conteiner preparado %s", post_id, cid)
@@ -214,10 +214,10 @@ def publish_due(row: dict, store: PublicationStore, publisher: InstagramPublishe
         return
     try:
         media_id = publisher.publish(current[2])
-    except Exception:
+    except Exception as exc:
         store.transition(post_id, "publishing", "uncertain")
         LOG.exception("%s: retorno incerto de media_publish; NAO repetir automaticamente", post_id)
-        return
+        raise RuntimeError(f"{post_id}: resposta incerta da Meta; verificar Instagram manualmente") from exc
     store.transition(post_id, "publishing", "published", media_id=media_id)
     LOG.info("%s: PUBLICADO. Media ID=%s", post_id, media_id)
 
@@ -260,6 +260,7 @@ def run_once(live: bool, now: datetime | None = None, *, sheets=None, drive=None
         if storage is None:
             storage = R2Storage()
         day = now.astimezone(ZONE).strftime("%Y-%m-%d")
+        failures = 0
         for row, stage in actionable:
             post_id = row["ID"].strip()
             try:
@@ -274,8 +275,9 @@ def run_once(live: bool, now: datetime | None = None, *, sheets=None, drive=None
                 if decision(row, datetime.now(ZONE)) == "DUE":
                     publish_due(row, store, publisher)
             except Exception:
+                failures += 1
                 LOG.exception("%s: falha ao processar agendamento; necessita revisao", post_id)
-        return 0
+        return 1 if failures else 0
     finally:
         if owns_store:
             store.close()
