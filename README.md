@@ -340,3 +340,132 @@ Se o PowerShell bloquear arquivos `.ps1`, use `powershell -NoProfile -ExecutionP
 - A execucao pode ocorrer alguns minutos apos o horario da planilha; **nao e agendamento nativo nos servidores da Meta**.
 - As imagens de posts com sessao Meta `prepared`, `preparing`, `publishing` ou `uncertain` sao protegidas contra a limpeza automatica.
 - Se quiser primeiro apenas o agendamento sem publicacao, NAO defina `ARAYFLOW_AUTOPUBLISH_ENABLED=true`; a simulacao manual continua disponivel.
+
+
+
+---
+
+## ArayFlow v0.7.0 — Flask + Playwright para o Meta Business Suite
+
+**Objetivo:** revisar a programacao do dia num painel local e agendar as publicacoes
+pela interface visivel do **Meta Business Suite**, para que a Meta publique no
+horario sem depender do Windows ligado. Esse fluxo nao usa o endpoint
+`media_publish` do Instagram nem requer armazenamento Cloudflare R2.
+
+**Avisos importantes:** o Meta Business Suite nao oferece API publica para
+registrar agendamentos nativos do Instagram. O Playwright acessa a interface
+web como um usuario: os campos mudam com o tempo. Por seguranca, a v0.7
+**nao clica no botao final de Agendar**. Voce confere a pagina/conta, data,
+hora, fuso e imagens, clica em Agendar e verifica o post no Planejador.
+Somente depois marca como confirmado no terminal. O status no SQLite e
+**declarado pelo operador**, nao uma confirmacao programatica da Meta.
+
+### Instalar no Windows, usando exclusivamente o .venv
+
+```powershell
+git pull origin main
+python -m pip install -r requirements.txt
+python -m playwright install chromium
+python -m unittest test_arayflow test_r2 test_sync test_scheduler test_business_suite -v
+```
+
+O ultimo comando testa os fluxos com simulacoes de arquivos/sessoes, **sem
+efetuar agendamentos reais**.
+
+### Iniciar painel Flask (somente localhost)
+
+```powershell
+python dashboard.py
+```
+
+Acesse **http://127.0.0.1:8766**. O painel exibe publicacoes da planilha,
+artes baixadas, legenda, historico SQLite, R2 e os status da API/Business Suite.
+A unica acao administrativa web disponivel e pausar/retomar explicitamente
+a tarefa Windows, com confirmacao e protecao CSRF. O painel nao publica
+nem exclui arquivos. Nao exponha essa porta em Cloudflare Tunnel/LAN.
+
+### Antes de usar o assistente Business Suite
+
+O agendador Meta Graph API de v0.5 pode publicar posts aprovados diretamente
+no Instagram. **Nunca use os dois agendadores para o mesmo post.**
+
+1. Abra o `.env` e altere `ARAYFLOW_AUTOPUBLISH_ENABLED=false`.
+2. Pause a tarefa do Windows para nao ficar processando a API:
+
+```powershell
+Disable-ScheduledTask -TaskName "ArayFlow Publisher"
+```
+
+3. Revise o Status `Aprovado`, a legenda, as artes e os horarios no Google Sheets.
+4. O post `ARAY-20261014-001` ja pode possuir um conteiner `prepared` pela
+   Meta Graph API: por seguranca, o assistente **ignora automaticamente**
+   posts com qualquer sessao API no SQLite, para evitar duplicatas.
+   Resolva o preparo antigo manualmente antes de tentar agendar esse post pelo
+   Business Suite, e nao apague linhas SQLite sem verificar a conta Instagram.
+
+### Simular e programar um dia
+
+Simulacao (somente leitura):
+
+```powershell
+python business_suite_assistant.py --date 2026-10-14
+```
+
+Iniciar sessao VISIVEL do Playwright (iterar os posts aprovados em ordem de hora):
+
+```powershell
+python business_suite_assistant.py --date 2026-10-14 --start
+```
+
+No primeiro uso, um navegador Chromium isolado sera aberto. Entre na conta
+Meta **manualmente** e conclua qualquer verificacao em duas etapas.
+Quando estiver no criador de publicacao do Business Suite com Instagram
+`@aray_solucoes` selecionado, responda `PRONTO` no PowerShell.
+
+O programa tenta carregar os arquivos e inserir a legenda, quando reconhece
+um unico campo com seguranca. Se nao encontrar, voce completa manualmente.
+**Em todos os casos**, voce seleciona a data/hora no Business Suite,
+clica em **Agendar** e verifica no **Planejador**. Depois confirma no
+PowerShell digitando `AGENDADO ARAY-YYYYMMDD-001` (ID exato do post).
+O assistente prossegue para o proximo post aprovado.
+
+Se algo nao estiver certo, **nao confirme**: o post fica em
+`needs_review` e o lote para. Verifique primeiro no Business Suite
+antes de uma nova tentativa. A nao confirmacao nao e considerada falha
+de publicacao da Meta; ela apenas impede duplicatas.
+
+Agendar apenas um post especifico:
+
+```powershell
+python business_suite_assistant.py --date 2026-10-14 --post ARAY-20261014-002 --start
+```
+
+Consultar estados persistidos no SQLite, sem acessar a Meta:
+
+```powershell
+python business_suite_assistant.py --status
+```
+
+Se uma sessao terminou antes do registro local, voce pode confirmar
+posteriormente **somente depois de verificar o agendamento no Planejador**:
+
+```powershell
+python business_suite_assistant.py --confirm ARAY-20261014-002
+```
+
+### Seguranca e persistencia
+
+- Perfil/cookies do Chromium em `data/playwright_meta_profile/`, fora do GitHub;
+  nao compartilhe essa pasta, pois ela pode conter uma sessao autenticada.
+- Banco SQLite `data/arayflow.sqlite3`: nova tabela `business_suite_schedule`
+  com estados `awaiting_confirmation`, `needs_review` e `scheduled`.
+- Reservas atomicas: posts com sessao API anterior nao sao criados no
+  Business Suite; posts reservados no Suite sao ignorados pela rotina API.
+- Sem CAPTCHA/MFA automatizados, sem tentativa de burlar controles da Meta.
+  O uso de automacao de navegador pode estar sujeito a restricoes da plataforma.
+- Nao ha garantia de seletores Playwright para a interface atual: na primeira
+  execucao real, pode ser necessario preencher campos manualmente.
+- O painel Flask funciona apenas em `127.0.0.1`; nao disponibiliza login
+  web porque nao e destinado a acesso externo.
+- Agendamentos apenas para horarios **futuros**; posts expirados nao sao agendados
+  automaticamente.
