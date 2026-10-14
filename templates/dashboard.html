@@ -134,7 +134,7 @@
             {% if autopublish %}<div class="notification error">A automação pela Graph API está AUTORIZADA no .env. Antes de usar o assistente Playwright, altere <code>ARAYFLOW_AUTOPUBLISH_ENABLED=false</code> e pause a tarefa Windows para evitar duplicatas.</div>{% endif %}
             {% if not autopublish and task_state not in ['Ready','Running','Queued'] %}
             <form action="{{ url_for('start_business_suite') }}" method="post" class="start-form">
-              <input type="hidden" name="csrf" value="{{ csrf }}">
+              <input type="hidden" name="csrf" value="{{ csrf_start }}">
               <input type="hidden" name="date" value="{{ day }}">
               <input type="hidden" name="confirmation" value="ABRIR">
               <button class="button primary" type="submit">◈ Abrir assistente do Business Suite</button>
@@ -171,11 +171,11 @@
             <a class="button outline" href="{{ url_for('dashboard',date=day,r2=1) }}#servicos">Consultar objetos do R2</a>
             {% if task_state in ['Ready','Running','Queued'] %}
             <form action="{{ url_for('scheduler_action',action='pause') }}" method="post" class="task-form">
-              <label for="confirm-pause">Pausar tarefa (digite PAUSAR)</label><input id="confirm-pause" type="text" name="confirmation" placeholder="PAUSAR" required autocomplete="off"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="button danger" type="submit">Pausar tarefa</button>
+              <label for="confirm-pause">Pausar tarefa (digite PAUSAR)</label><input id="confirm-pause" type="text" name="confirmation" placeholder="PAUSAR" required autocomplete="off"><input type="hidden" name="csrf" value="{{ csrf_pause }}"><button class="button danger" type="submit">Pausar tarefa</button>
             </form>
             {% elif task_state == 'Disabled' %}
             <form action="{{ url_for('scheduler_action',action='resume') }}" method="post" class="task-form">
-              <label for="confirm-resume">Retomar tarefa (digite RETOMAR)</label><input id="confirm-resume" type="text" name="confirmation" placeholder="RETOMAR" required autocomplete="off"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="button primary" type="submit">Retomar tarefa</button>
+              <label for="confirm-resume">Retomar tarefa (digite RETOMAR)</label><input id="confirm-resume" type="text" name="confirmation" placeholder="RETOMAR" required autocomplete="off"><input type="hidden" name="csrf" value="{{ csrf_resume }}"><button class="button primary" type="submit">Retomar tarefa</button>
             </form>
             {% endif %}
             <p class="note">Pausar não interrompe uma publicação que já esteja em andamento.</p>
