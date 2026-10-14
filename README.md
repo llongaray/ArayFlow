@@ -739,3 +739,67 @@ O diagnostico continua sem ler a planilha, reservar posts ou clicar em
 Publicar/Agendar. Os erros nao classificados sao suprimidos por
 privacidade. Consulte a documentacao oficial:
 https://github.com/ChromeDevTools/chrome-devtools-mcp/blob/main/docs/troubleshooting.md
+
+
+---
+
+## Assistente de formularios do Meta Business Suite (Chrome existente)
+
+O ArayFlow agora tenta **preencher quatro campos do compositor** usando o
+Chrome DevTools MCP: imagem(ns) locais, legenda, data e horario. Esta etapa
+NAO envia a publicacao nem clica em `Agendar` ou `Publicar`.
+
+O preenchimento usa a estrutura de acessibilidade da aba Meta, nao
+coordenadas de mouse, JavaScript injetado ou seletores CSS fragilizados.
+A operacao de texto usa `fill_form` quando encontra campos inequivocos;
+o upload usa `upload_file`. Como o upload pode mudar os UIDs, o
+assistente **faz novo snapshot** antes de preencher o texto e o agendamento.
+Ele confirma que a aba continua em `business.facebook.com` antes de
+cada tentativa de alteracao.
+
+### Como testar com apenas um post aprovado, FUTURO
+
+```powershell
+git pull origin main
+python -m unittest test_existing_chrome test_business_suite -v
+python business_suite_assistant.py --date 2026-10-14 --post ARAY-20261014-002 --start --browser existing
+```
+
+Os IDs e a data acima sao exemplos de um lote existente. O comando recusa
+agendar um horario que ja passou. Se necessario, escolha uma data futura
+aprovada no Google Sheets.
+
+1. No Chrome pessoal, mantenha `chrome://inspect/#remote-debugging` ativado.
+   Quando solicitado, autorize o acesso de depuracao.
+2. Digite `CONECTAR CHROME`. O assistente seleciona uma aba existente
+   do Meta Business Suite ou abre outra no MESMO Chrome.
+3. No Business Suite, selecione o Instagram correto (`@aray_solucoes`),
+   abra **Criar publicacao**, selecione o modo **Programar** e deixe
+   visiveis os campos de **Data** e **Horario**.
+4. Digite `PRONTO` no terminal. O assistente tenta enviar as artes na
+   ordem validada pelo Drive e preencher legenda, data e horario.
+5. Revise os quatro dados diretamente no Business Suite e confira o
+   fuso/conta. Campos nao encontrados, duplicados ou incompatíveis
+   permanecem para preenchimento manual.
+6. **Somente voce** deve clicar no botao final **Agendar** e confirmar
+   a presenca do post no Planejador. Depois digite
+   `AGENDADO ARAY-AAAAMMDD-NNN` com o ID correto no terminal.
+
+O modo automatico do formulario usa valores de data `DD/MM/AAAA` e
+hora `HH:MM` quando encontra ambos os campos. Interfaces em outros
+idiomas podem exigir formato diferente; verifique no navegador e
+preencha manualmente se necessario.
+
+Se data OU horario nao estiver identificado sem ambiguidade, **nenhum
+dos dois e preenchido**. O assistente nao assume que a Meta aceitou o
+agendamento com base no retorno do MCP. O status `scheduled` e gravado
+no SQLite somente apos confirmacao humana no Planejador.
+
+O sistema continua recusando posts que ja tem sessao API ou Business
+Suite no SQLite e nao usa R2 neste fluxo. O agendador antigo da API
+precisa permanecer desativado.
+
+**Limite atual:** nao existe validacao real automatica dos seletores
+do Business Suite da sua conta; a estrutura acessivel pode variar.
+Os testes cobrem cenarios simulados de snapshot, nao substituem a
+primeira verificacao em tela.
