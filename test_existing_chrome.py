@@ -9,7 +9,10 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch, AsyncMock
 
-from business_suite_forms import (discover_fields, plan_form_values, safe_composer_hints, validate_media_files)
+from business_suite_forms import (
+    discover_fields, plan_form_values, safe_composer_hints, safe_control_shapes,
+    validate_media_files,
+)
 from existing_chrome import (
     ChromeMCP, chrome_connection_args, extract_text, parse_business_pages,
     server_command, unique_uid, CAPTION_TERMS, UPLOAD_TERMS,
@@ -140,6 +143,41 @@ class ExistingChromeTests(unittest.TestCase):
         )
         self.assertIsNone(fields.caption_uid)
         self.assertIn("legenda", fields.ambiguous)
+
+    def test_diagnostic_detects_date_and_time_as_buttons_without_leaking_values(self):
+        snapshot = (
+            'uid=7_1 button "Adicionar foto/vídeo"\n'
+            'uid=7_2 textbox "Digite sua legenda confidencial"\n'
+            'uid=7_3 button "14 de outubro de 2026"\n'
+            'uid=7_4 button "16:55"\n'
+            'uid=7_5 switch "Definir data e hora" checked\n'
+            'uid=7_6 button "Agendar"\n'
+        )
+        diagnostic = safe_control_shapes(snapshot)
+        self.assertEqual(diagnostic["roles"]["textbox"], 1)
+        self.assertEqual(diagnostic["roles"]["button"], 4)
+        self.assertEqual(diagnostic["roles"]["switch"], 1)
+        self.assertEqual(diagnostic["textbox_types"]["other_named"], 1)
+        self.assertEqual(diagnostic["date_value_roles"], ("button",))
+        self.assertEqual(diagnostic["time_value_roles"], ("button",))
+        self.assertTrue(diagnostic["date_text_visible"])
+        self.assertTrue(diagnostic["time_text_visible"])
+        for secret in ("legenda confidencial", "16:55", "outubro", "uid=", "7_2"):
+            self.assertNotIn(secret, str(diagnostic))
+
+    def test_diagnostic_detects_unlabelled_textbox_without_value_leak(self):
+        snapshot = (
+            'uid=2_1 textbox\n'
+            'uid=2_2 button "Agendar"\n'
+            '14 de outubro de 2026\n'
+            '16:55\n'
+        )
+        diagnostic = safe_control_shapes(snapshot)
+        self.assertEqual(diagnostic["textbox_types"]["unnamed"], 1)
+        self.assertFalse(diagnostic["date_value_roles"])
+        self.assertFalse(diagnostic["time_value_roles"])
+        self.assertTrue(diagnostic["date_text_visible"])
+        self.assertTrue(diagnostic["time_text_visible"])
 
     def test_existing_business_tab_is_reused_without_new_browser(self):
         fake = FakeSession(
