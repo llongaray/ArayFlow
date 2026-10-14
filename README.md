@@ -813,9 +813,11 @@ Antes de tentar o primeiro preenchimento real, use o modo seguro:
 python business_suite_assistant.py --inspect-composer
 ```
 
-No Chrome pessoal, deixe a tela **Criar publicacao** do Meta Business
-Suite aberta e as opcoes **Programar**, **Data** e **Horario** visiveis.
-Digite `INSPECIONAR CAMPOS` no terminal e autorize o Chrome. O resultado
+No Chrome pessoal, voce pode deixar a tela **Criar publicacao** do
+Meta Business Suite aberta, com as opcoes **Programar**, **Data** e
+**Horario** visiveis. Se nao houver aba Meta, o proprio ArayFlow
+tentara abrir uma aba no Chrome conectado. Digite `INSPECIONAR CAMPOS`
+e, apos abrir o compositor, digite `PRONTO`. O resultado
 mostra apenas `images`, `caption`, `date` e `time`, cada qual como
 `IDENTIFICADO` ou `MANUAL`, sem imprimir legenda, senhas ou a arvore
 completa do navegador.
@@ -846,9 +848,13 @@ necessario, aguarde terminar os redirecionamentos e abra a tela
 python business_suite_assistant.py --inspect-composer
 ```
 
-A inspecao nao cria mais abas: se a Meta nao estiver aberta, mostra
-uma orientacao sem navegar no Chrome. O agendamento assistido normal
-continua podendo abrir uma unica aba e aguardar seu carregamento.
+A inspecao reutiliza uma aba do Business Suite ou abre uma nova aba
+no Chrome pessoal quando necessario. Apos a abertura, selecione
+@aray_solucoes, abra Criar publicacao, exiba as opcoes de Programar e
+digite PRONTO no terminal para identificar os campos. Se a Meta
+redirecionar para login, conclua o acesso manualmente e digite
+VERIFICAR ABA; o assistente nao contorna autenticacao. A inspecao
+nao envia imagens, nao edita posts e nao agenda publicacoes.
 
 Nos exemplos anteriores, `AAAA-MM-DD` e `ARAY-AAAAMMDD-NNN` sao
 **marcadores explicativos**, nao parametros validos. Use data em
