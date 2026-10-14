@@ -7,31 +7,23 @@ Nunca chama a API Meta.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
-import re
 import socket
 import sys
 from collections import defaultdict
 from contextlib import contextmanager
 from datetime import datetime
-from pathlib import Path
 
-from google_client import BASE_DIR, authenticate, read_calendar, services
+from google_client import BASE_DIR, authenticate, services
 from image_validator import validate_batch
 from r2_storage import R2Storage
-from r2_upload import images_for
 from sync_store import SyncStore
-import os
+
+from arayflow.editorial import load_sheet_rows
+from arayflow.local_media import images_for, sha256_file
+from arayflow.settings import DB_PATH, POST_ID_RE
 
 IGNORED_STATUSES = {"cancelado", "cancelada", "rejeitado", "rejeitada", "publicado", "publicada"}
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 @contextmanager
 def single_sync():
@@ -50,9 +42,7 @@ def single_sync():
 def get_posts(day: str):
     creds = authenticate()
     sheets, _ = services(creds)
-    rows = read_calendar(sheets,
-        os.getenv("GOOGLE_SPREADSHEET_ID", "1dA5GFM2qS6RXzpgEiBXLHO4uYkwp4l46B17dCZCcZKM"),
-        os.getenv("GOOGLE_SHEET_NAME", "Calendário"))
+    rows = load_sheet_rows(sheets)
     selected = []
     for post in rows:
         if not post.get("Data", "").strip():
@@ -73,7 +63,7 @@ def make_assets(day: str, posts: list[dict], storage: R2Storage) -> list[dict]:
     used_ids = set()
     for post in posts:
         post_id = post.get("ID", "").strip()
-        if post_id in used_ids or not re.fullmatch(r"ARAY-\d{8}-\d{3,}", post_id):
+        if post_id in used_ids or not POST_ID_RE.fullmatch(post_id):
             raise ValueError(f"ID duplicado ou invalido: {post_id!r}")
         used_ids.add(post_id)
         if datetime.strptime(post_id[5:13], "%Y%m%d").strftime("%Y-%m-%d") != day:
@@ -196,7 +186,7 @@ def main() -> int:
     parser.add_argument("--apply", action="store_true", help="Exclui objetos antigos elegiveis e envia as imagens do dia")
     parser.add_argument("--sessions", action="store_true", help="Consulta historico SQLite sem acessar Google/R2")
     args = parser.parse_args()
-    db = BASE_DIR / "data" / "arayflow.sqlite3"
+    db = DB_PATH
     store = SyncStore(db)
     try:
         if args.sessions:

@@ -9,29 +9,20 @@ import argparse
 import json
 import logging
 import os
-import re
 import sys
-from datetime import datetime, timedelta
-from pathlib import Path
-from zoneinfo import ZoneInfo
+from datetime import datetime
 
-from dotenv import load_dotenv
-from google_client import (BASE_DIR, authenticate, services, read_calendar,
-                           list_images, extract_folder_id, download_image)
-from image_validator import validate_batch
+from google_client import authenticate, services
 from instagram_publisher import InstagramPublisher
 from publication_store import PublicationStore
 from r2_storage import R2Storage
-from r2_upload import images_for
-from sync_day import single_sync, sha256_file
+from sync_day import single_sync
 from sync_store import SyncStore
 
-load_dotenv(BASE_DIR / ".env")
-ZONE = ZoneInfo("America/Sao_Paulo")
-PREPARE_MINUTES = 10
-MAX_DELAY_MINUTES = 15
-APPROVED = {"aprovado", "aprovado para publicação", "aprovado para publicacao"}
-ID_RE = re.compile(r"ARAY-\d{8}-\d{3,}$")
+from arayflow.editorial import ZONE, decision, rows_today, scheduled_time
+from arayflow.local_media import ensure_local, sha256_file
+from arayflow.settings import BASE_DIR, DB_PATH, autopublish_enabled
+
 LOG = logging.getLogger("arayflow.scheduler")
 
 
@@ -45,83 +36,6 @@ def configure_log() -> None:
                                 backupCount=3, encoding="utf-8")
         h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
         LOG.addHandler(h)
-
-
-def scheduled_time(row: dict) -> datetime:
-    post_id = row.get("ID", "").strip()
-    if not ID_RE.fullmatch(post_id):
-        raise ValueError("ID editorial invalido")
-    day = datetime.strptime(row.get("Data", "").strip(), "%d/%m/%Y").date()
-    if post_id[5:13] != day.strftime("%Y%m%d"):
-        raise ValueError(f"ID/data divergentes em {post_id}")
-    hour = row.get("Horário", "").strip()
-    match = re.fullmatch(r"(\d{1,2}):(\d{2})(?::00)?", hour)
-    if not match or int(match[1]) > 23 or int(match[2]) > 59:
-        raise ValueError(f"Horario invalido em {post_id}: {hour}")
-    return datetime(day.year, day.month, day.day,
-                    int(match[1]), int(match[2]), tzinfo=ZONE)
-
-
-def decision(row: dict, now: datetime) -> str:
-    """SKIP, WAIT, PREPARE ou DUE; nunca recuperar posts muito atrasados."""
-    if row.get("Status", "").strip().casefold() not in APPROVED:
-        return "SKIP"
-    due = scheduled_time(row)
-    delta = (due - now.astimezone(ZONE)).total_seconds()
-    if delta > PREPARE_MINUTES * 60:
-        return "WAIT"
-    if delta < -MAX_DELAY_MINUTES * 60:
-        return "EXPIRED"
-    return "DUE" if delta <= 0 else "PREPARE"
-
-
-def rows_today(sheets, now: datetime) -> list[dict]:
-    rows = read_calendar(sheets,
-        os.getenv("GOOGLE_SPREADSHEET_ID", "1dA5GFM2qS6RXzpgEiBXLHO4uYkwp4l46B17dCZCcZKM"),
-        os.getenv("GOOGLE_SHEET_NAME", "Calendário"))
-    date = now.astimezone(ZONE).strftime("%d/%m/%Y")
-    result = [row for row in rows if row.get("Data", "").strip() == date]
-    ids = [row.get("ID", "").strip() for row in result]
-    if len(ids) != len(set(ids)):
-        raise ValueError("IDs duplicados no calendario do dia; operacao cancelada")
-    return result
-
-
-def ensure_local(row: dict, drive) -> list[Path]:
-    """Baixa automaticamente imagens ausentes, sem sobrescrever artes existentes."""
-    post_id = row["ID"].strip()
-    day = scheduled_time(row).strftime("%Y-%m-%d")
-    expected = int(row.get("Qtd. imagens", "0"))
-    if not 1 <= expected <= 10:
-        raise ValueError(f"Quantidade invalida em {post_id}")
-    paths = images_for(post_id)
-    if len(paths) != expected:
-        folder_id = extract_folder_id(row.get("Pasta das imagens", ""))
-        remote = list_images(drive, folder_id)
-        if len(remote) != expected:
-            raise RuntimeError(f"{post_id}: Google Drive possui {len(remote)} imagens, esperado {expected}")
-        target = BASE_DIR / "downloads" / day / post_id
-        target.mkdir(parents=True, exist_ok=True)
-        for f in remote:
-            name = f["name"]
-            if not re.fullmatch(re.escape(post_id) + r"_slide-\d+\.(?:png|jpg|jpeg)", name, re.I):
-                raise ValueError(f"Nome de imagem nao esperado: {name}")
-            destination = target / name
-            if destination.is_file():
-                continue
-            temp = target / (name + ".partial")
-            try:
-                download_image(drive, f, temp)
-                temp.replace(destination)
-            finally:
-                temp.unlink(missing_ok=True)
-        paths = images_for(post_id)
-    if len(paths) != expected:
-        raise RuntimeError(f"{post_id}: faltam imagens locais")
-    validate_batch(paths)
-    if not row.get("Legenda pronta", "").strip():
-        raise ValueError(f"{post_id}: legenda vazia")
-    return paths
 
 
 def safe_cleanup(storage: R2Storage, sessions: SyncStore, now_day: str) -> int:
@@ -244,14 +158,14 @@ def run_once(live: bool, now: datetime | None = None, *, sheets=None, drive=None
     if not live:
         print("[DRY-RUN] Nenhuma operacao Meta/R2 realizada.")
         return 0
-    if os.getenv("ARAYFLOW_AUTOPUBLISH_ENABLED", "").strip().lower() != "true":
+    if not autopublish_enabled():
         raise RuntimeError("Auto-publicacao desativada. Configure ARAYFLOW_AUTOPUBLISH_ENABLED=true no .env apos validar o dry-run.")
     owns_store = store is None
     if owns_store:
-        store = PublicationStore(BASE_DIR / "data" / "arayflow.sqlite3")
+        store = PublicationStore(DB_PATH)
     owns_sessions = sessions is None
     if owns_sessions:
-        sessions = SyncStore(BASE_DIR / "data" / "arayflow.sqlite3")
+        sessions = SyncStore(DB_PATH)
     try:
         if not actionable:
             return 0

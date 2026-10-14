@@ -4,6 +4,8 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
+from arayflow.store import SqliteResource
+
 DDL = """
 CREATE TABLE IF NOT EXISTS daily_syncs (
   day TEXT PRIMARY KEY,
@@ -32,7 +34,7 @@ CREATE TABLE IF NOT EXISTS r2_events (
 def utcnow() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
-class SyncStore:
+class SyncStore(SqliteResource):
     def __init__(self, path: Path):
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)

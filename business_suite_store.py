@@ -9,6 +9,8 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
+from arayflow.store import SqliteResource
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS business_suite_schedule (
   post_id TEXT PRIMARY KEY,
@@ -23,7 +25,7 @@ CREATE TABLE IF NOT EXISTS business_suite_schedule (
 def utcnow() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
-class BusinessSuiteStore:
+class BusinessSuiteStore(SqliteResource):
     def __init__(self, path: Path):
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)

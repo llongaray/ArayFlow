@@ -7,26 +7,28 @@ Nunca tenta contornar login, MFA, CAPTCHA ou restricoes da plataforma.
 from __future__ import annotations
 
 import argparse
-import os
 import re
 import sys
 from datetime import datetime
 from pathlib import Path
-from zoneinfo import ZoneInfo
-
-from dotenv import load_dotenv
 
 from business_suite_store import BusinessSuiteStore
 from publication_store import PublicationStore
-from google_client import BASE_DIR, authenticate, read_calendar, services
-from scheduled_publish import APPROVED, ensure_local, scheduled_time
+from google_client import authenticate, services
 from sync_day import single_sync
 
-load_dotenv(BASE_DIR / ".env")
-ZONE = ZoneInfo("America/Sao_Paulo")
-POST_RE = re.compile(r"ARAY-\d{8}-\d{3,}$")
-DB_FILE = BASE_DIR / "data" / "arayflow.sqlite3"
-PROFILE_DIR = BASE_DIR / "data" / "playwright_chrome_profile"
+from arayflow.editorial import APPROVED, load_sheet_rows, scheduled_time
+from arayflow.local_media import ensure_local
+from arayflow.settings import (
+    CHROME_PROFILE_DIR,
+    DB_PATH,
+    POST_ID_RE,
+    ZONE,
+    autopublish_enabled,
+)
+
+PROFILE_DIR = CHROME_PROFILE_DIR
+DB_FILE = DB_PATH
 CAPTION_LABELS = re.compile(
     r"legenda|escreva uma legenda|caption|write a caption|descri[cç][aã]o do post",
     re.I
@@ -36,11 +38,7 @@ CAPTION_LABELS = re.compile(
 def approved_rows(day: str, post_id: str | None = None) -> tuple[list[dict], object]:
     creds = authenticate()
     sheets, drive = services(creds)
-    rows = read_calendar(
-        sheets,
-        os.getenv("GOOGLE_SPREADSHEET_ID", "1dA5GFM2qS6RXzpgEiBXLHO4uYkwp4l46B17dCZCcZKM"),
-        os.getenv("GOOGLE_SHEET_NAME", "Calendário"),
-    )
+    rows = load_sheet_rows(sheets)
     result = []
     for row in rows:
         if row.get("Data", "").strip() != datetime.strptime(day, "%Y-%m-%d").strftime("%d/%m/%Y"):
@@ -50,7 +48,7 @@ def approved_rows(day: str, post_id: str | None = None) -> tuple[list[dict], obj
             continue
         if row.get("Status", "").strip().casefold() not in APPROVED:
             continue
-        if not POST_RE.fullmatch(ident):
+        if not POST_ID_RE.fullmatch(ident):
             raise ValueError(f"ID invalido na planilha: {ident}")
         due = scheduled_time(row)
         if due.date().isoformat() != day:
@@ -267,7 +265,7 @@ def main() -> int:
                 print(f"{r['post_id']} | {r['target_at']} | {r['status']} | {r['note'] or '-'}")
             return 0
         if args.confirm:
-            if not POST_RE.fullmatch(args.confirm):
+            if not POST_ID_RE.fullmatch(args.confirm):
                 parser.error("ID invalido")
             record = ledger.get(args.confirm)
             if not record or record["status"] not in {"needs_review", "awaiting_confirmation"}:
@@ -289,9 +287,9 @@ def main() -> int:
             raise ValueError("Data invalida; use AAAA-MM-DD") from exc
         if day != args.date:
             raise ValueError("Data deve seguir AAAA-MM-DD")
-        if args.post and not POST_RE.fullmatch(args.post):
+        if args.post and not POST_ID_RE.fullmatch(args.post):
             parser.error("ID invalido")
-        if args.start and os.getenv("ARAYFLOW_AUTOPUBLISH_ENABLED", "").strip().lower() == "true":
+        if args.start and autopublish_enabled():
             raise RuntimeError(
                 "DESATIVE primeiro ARAYFLOW_AUTOPUBLISH_ENABLED no .env e a tarefa ArayFlow Publisher "
                 "para evitar postagens duplicadas entre a API e o Business Suite."

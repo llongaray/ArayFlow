@@ -15,7 +15,10 @@ from datetime import datetime
 from pathlib import Path
 
 from publication_store import PublicationStore
-from scheduled_publish import ZONE, ensure_local, scheduled_time
+
+from arayflow.editorial import scheduled_time
+from arayflow.local_media import ensure_local
+from arayflow.settings import ZONE
 
 META_URL = "https://business.facebook.com/"
 PAGE_PATTERN = re.compile(r"(?m)^\s*(?:[-*]\s*)?(\d+):\s+(https?://\S+)")
@@ -214,7 +217,10 @@ async def diagnose_chrome_connection() -> None:
         raise RuntimeError("SDK MCP ausente: execute pip install -r requirements.txt") from exc
 
     command, args = server_command()
-    print("[DIAGNOSTICO] Chrome pessoal 144+ deve estar aberto com depuracao habilitada.")
+    print("[DIAGNOSTICO] Chrome 144 ou mais recente deve estar aberto.")
+    print("[DIAGNOSTICO] Em chrome://inspect/#remote-debugging, a opcao")
+    print("    'Allow remote debugging for this browser instance' precisa estar marcada.")
+    print("    A pagina mostra 'Server running at: 127.0.0.1:9222' quando esta pronta.")
     print("[DIAGNOSTICO] O Chrome pedira sua autorizacao de conexao.")
     if input("Digite DIAGNOSTICAR CHROME para conectar sem agendar: ").strip() != "DIAGNOSTICAR CHROME":
         print("[CANCELADO] Nenhuma conexao iniciada.")
@@ -256,8 +262,9 @@ async def schedule_existing_chrome(rows: list[dict], drive, ledger, db_file: Pat
     command, args = server_command()
     print(
         "\n[CHROME PESSOAL] No Chrome onde a Meta JA esta logada, abra "
-        "chrome://inspect/#remote-debugging e habilite "
-        "'Allow remote debugging for this browser instance'."
+        "chrome://inspect/#remote-debugging e marque "
+        "'Allow remote debugging for this browser instance'. "
+        "Com a opcao ligada, a pagina mostra Server running at: 127.0.0.1:9222."
     )
     print(
         "[SEGURANCA] Autorize a conexao solicitada PELO Chrome somente "

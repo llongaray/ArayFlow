@@ -3,6 +3,11 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
+from arayflow.store import SqliteResource
+
+STATUSES = frozenset({
+    "preparing", "prepared", "publishing", "published", "uncertain", "failed",
+})
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS publications (
   post_id TEXT PRIMARY KEY,
@@ -12,7 +17,7 @@ CREATE TABLE IF NOT EXISTS publications (
   updated_at TEXT NOT NULL
 );
 """
-class PublicationStore:
+class PublicationStore(SqliteResource):
     def __init__(self, path: Path):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -27,7 +32,7 @@ class PublicationStore:
         ).fetchone()
 
     def set(self, post_id: str, status: str, *, media_id=None, container_id=None):
-        if status not in {"preparing", "prepared", "publishing", "published", "uncertain", "failed"}:
+        if status not in STATUSES:
             raise ValueError("Status invalido")
         self.conn.execute(
             """INSERT INTO publications(post_id,status,media_id,container_id,updated_at)
@@ -73,7 +78,7 @@ class PublicationStore:
     def transition(self, post_id: str, expected: str, target: str,
                    *, media_id=None, container_id=None) -> bool:
         """Atualiza apenas se a sessao estiver no estado esperado."""
-        if target not in {"preparing","prepared","publishing","published","uncertain","failed"}:
+        if target not in STATUSES:
             raise ValueError("Status invalido")
         cur = self.conn.execute(
             """UPDATE publications SET status=?,

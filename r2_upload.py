@@ -5,27 +5,14 @@ Nao faz chamadas a API Meta e nunca publica no Instagram.
 from __future__ import annotations
 import argparse
 import json
-import re
 import sys
-from datetime import datetime
-from pathlib import Path
-from dotenv import load_dotenv
+
 from google_client import BASE_DIR
 from image_validator import validate_batch
 from r2_storage import R2Storage
 
-load_dotenv(BASE_DIR / ".env")
-
-def images_for(post: str) -> list[Path]:
-    day = datetime.strptime(post[5:13], "%Y%m%d").strftime("%Y-%m-%d")
-    folder = BASE_DIR / "downloads" / day / post
-    paths = [
-        p for p in folder.iterdir()
-        if p.is_file() and re.fullmatch(
-            re.escape(post) + r"_slide-\d+\.(png|jpg|jpeg)", p.name, re.I
-        )
-    ] if folder.exists() else []
-    return sorted(paths, key=lambda p: int(re.search(r"_slide-(\d+)", p.name).group(1)))
+from arayflow.local_media import images_for
+from arayflow.settings import POST_ID_RE
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="ArayFlow R2 — nenhum comando publica no Instagram")
@@ -42,7 +29,7 @@ def main() -> int:
         print(f"[OK] R2 acessivel: {storage.bucket}")
         print("[OK] Nenhuma imagem enviada.")
         return 0
-    if not re.fullmatch(r"ARAY-\d{8}-\d{3,}", args.post):
+    if not POST_ID_RE.fullmatch(args.post):
         parser.error("ID de post invalido")
     paths = images_for(args.post)
     validate_batch(paths)

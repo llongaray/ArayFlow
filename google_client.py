@@ -6,17 +6,19 @@ import os
 import re
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import parse_qs, urlparse
 
-from dotenv import load_dotenv
+import requests
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 
-BASE_DIR = Path(__file__).resolve().parent
-load_dotenv(BASE_DIR / '.env')
+from arayflow.settings import BASE_DIR, google_email
+
+_SLIDE_NUMBER = re.compile(r"slide[-_ ]*(\d+)", re.I)
+_ALTERNATIVE = re.compile(r"(alternativa|alternative|backup)", re.I)
 SCOPES = [
     'https://www.googleapis.com/auth/spreadsheets.readonly',
     'https://www.googleapis.com/auth/drive.readonly',
@@ -57,12 +59,11 @@ def authenticate():
     token_file.parent.mkdir(parents=True, exist_ok=True)
     token_file.write_text(creds.to_json(), encoding='utf-8')
     # Validação efetiva de conta para evitar gravação de token do Google pessoal.
-    import requests
     resp = requests.get('https://www.googleapis.com/oauth2/v3/userinfo',
                         headers={'Authorization': f'Bearer {creds.token}'}, timeout=20)
     resp.raise_for_status()
     email = resp.json().get('email', '')
-    expected = os.getenv('GOOGLE_ACCOUNT_EMAIL', 'aray.solucoes@gmail.com').strip().lower()
+    expected = google_email()
     if email.lower() != expected:
         token_file.unlink(missing_ok=True)
         raise RuntimeError(f'Conta Google incorreta: {email!r}. Esperada: {expected!r}. Token local descartado.')
@@ -118,8 +119,14 @@ def list_images(drive: Any, folder_id: str) -> list[dict[str, Any]]:
         if not page_token:
             break
     # Alternativas não contam como slides oficiais.
-    files = [f for f in files if not re.search(r'(alternativa|alternative|backup)', f['name'], re.I)]
-    return sorted(files, key=lambda f: (int(re.search(r'slide[-_ ]*(\d+)', f['name'], re.I).group(1)) if re.search(r'slide[-_ ]*(\d+)', f['name'], re.I) else 999, f['name'].lower()))
+    official = [item for item in files if not _ALTERNATIVE.search(item["name"])]
+
+    def slide_order(item: dict) -> tuple[int, str]:
+        match = _SLIDE_NUMBER.search(item["name"])
+        number = int(match.group(1)) if match else 999
+        return number, item["name"].lower()
+
+    return sorted(official, key=slide_order)
 
 
 def download_image(drive: Any, file: dict[str, Any], destination: Path) -> None:

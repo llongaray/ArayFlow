@@ -5,33 +5,23 @@ URLs publicas sao fornecidas por um manifesto local JSON (fora do Git).
 import argparse
 import json
 import os
-import re
 import sys
 from datetime import datetime
 from pathlib import Path
 
-from dotenv import load_dotenv
-from google_client import authenticate, services, read_calendar, BASE_DIR
+from google_client import authenticate, services
 from image_validator import validate_batch
 from instagram_publisher import InstagramPublisher
 from publication_store import PublicationStore
 
-load_dotenv(BASE_DIR / ".env")
-
-def post_files(post_id: str, day: str) -> list[Path]:
-    folder = BASE_DIR / "downloads" / day / post_id
-    files = sorted(folder.glob("*_slide-*.png")) + sorted(folder.glob("*_slide-*.jpg"))
-    files = [p for p in files if not re.search(r"(alternativa|backup|alternative)",p.name,re.I)]
-    return sorted(files, key=lambda p: int(re.search(r"slide-(\d+)", p.name).group(1)))
+from arayflow.editorial import APPROVED, load_sheet_rows
+from arayflow.local_media import images_for
+from arayflow.settings import DB_PATH, POST_ID_RE
 
 def load_post(post_id: str):
     creds = authenticate()
     sheets, _ = services(creds)
-    rows = read_calendar(
-        sheets,
-        os.getenv("GOOGLE_SPREADSHEET_ID", "1dA5GFM2qS6RXzpgEiBXLHO4uYkwp4l46B17dCZCcZKM"),
-        os.getenv("GOOGLE_SHEET_NAME","Calendário")
-    )
+    rows = load_sheet_rows(sheets)
     matches = [p for p in rows if p.get("ID","").strip() == post_id]
     if len(matches) != 1:
         raise ValueError(f"Esperado 1 post com ID={post_id}, encontrados {len(matches)}")
@@ -45,14 +35,14 @@ def main():
     commands.add_argument("--prepare", action="store_true", help="Cria conteineres na Meta, mas NAO publica")
     commands.add_argument("--publish", action="store_true", help="Publica conteiner preparado; pede confirmacao")
     args = parser.parse_args()
-    if not re.fullmatch(r"ARAY-\d{8}-\d{3,}", args.post):
+    if not POST_ID_RE.fullmatch(args.post):
         parser.error("ID invalido")
     date_value = datetime.strptime(args.post[5:13], "%Y%m%d").strftime("%Y-%m-%d")
     post = load_post(args.post)
     expected_date = datetime.strptime(post["Data"], "%d/%m/%Y").strftime("%Y-%m-%d")
     if date_value != expected_date:
         raise ValueError("Data da planilha difere da data no ID")
-    images = post_files(args.post,date_value)
+    images = images_for(args.post)
     expected = int(post["Qtd. imagens"])
     if len(images) != expected:
         raise ValueError(f"Esperadas {expected} imagens baixadas; encontradas {len(images)}. Execute main.py --download")
@@ -66,8 +56,7 @@ def main():
         print(f"  [OK] {r.path.name}: {r.width}x{r.height} {r.format}")
     print(f"  Legenda: {len(caption)} caracteres")
 
-    db_path = BASE_DIR / "data" / "arayflow.sqlite3"
-    db = PublicationStore(db_path)
+    db = PublicationStore(DB_PATH)
     try:
         previous = db.get(args.post)
         if previous:
@@ -75,7 +64,7 @@ def main():
         if not args.prepare and not args.publish:
             print("[DRY-RUN] Imagens e legenda validadas. Nenhuma chamada de escrita Meta.")
             return 0
-        if status.casefold() not in {"aprovado","aprovado para publicação","aprovado para publicacao"}:
+        if status.casefold() not in APPROVED:
             raise ValueError("Post ainda nao aprovado na planilha. Altere o Status para 'Aprovado' apos revisao.")
         if previous and previous[0] in {"preparing","published","publishing","uncertain","failed"}:
             raise RuntimeError("Publicacao ja enviada ou em estado incerto. Verifique no Instagram antes de repetir.")

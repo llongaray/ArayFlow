@@ -16,19 +16,17 @@ from collections import deque
 from datetime import datetime, timedelta
 from pathlib import Path
 from threading import Lock
-from zoneinfo import ZoneInfo
-
 from dotenv import load_dotenv
 from flask import Flask, abort, flash, redirect, render_template, request, send_file, url_for
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
-from google_client import BASE_DIR, authenticate, read_calendar, services
+from google_client import BASE_DIR, authenticate, services
 from r2_storage import R2Storage
-from scheduled_publish import APPROVED, decision, scheduled_time
+
+from arayflow.editorial import APPROVED, decision, load_sheet_rows
+from arayflow.settings import POST_ID_RE, ZONE, autopublish_enabled, spreadsheet_url
 
 load_dotenv(BASE_DIR / ".env")
-ZONE = ZoneInfo("America/Sao_Paulo")
-POST_ID = re.compile(r"ARAY-\d{8}-\d{3,}$")
 SLIDE_NAME = re.compile(r"ARAY-\d{8}-\d{3,}_slide-(\d+)\.(png|jpg|jpeg)$", re.I)
 TASK_NAME = "ArayFlow Publisher"
 CACHE_SECONDS = 45
@@ -43,7 +41,7 @@ def parse_day(value: str | None) -> str:
 
 
 def slides_for(root: Path, post_id: str) -> list[Path]:
-    if not POST_ID.fullmatch(post_id):
+    if not POST_ID_RE.fullmatch(post_id):
         return []
     day = datetime.strptime(post_id[5:13], "%Y%m%d").date().isoformat()
     folder = root / "downloads" / day / post_id
@@ -145,11 +143,7 @@ def safe_log_lines(root: Path) -> list[str]:
 def get_calendar():
     credentials = authenticate()
     sheets, _ = services(credentials)
-    return read_calendar(
-        sheets,
-        os.getenv("GOOGLE_SPREADSHEET_ID", "1dA5GFM2qS6RXzpgEiBXLHO4uYkwp4l46B17dCZCcZKM"),
-        os.getenv("GOOGLE_SHEET_NAME", "Calendário"),
-    )
+    return load_sheet_rows(sheets)
 
 
 def create_app(root: Path | None = None) -> Flask:
@@ -253,7 +247,7 @@ def create_app(root: Path | None = None) -> Flask:
             if row.get("Data", "").strip() != selected_date.strftime("%d/%m/%Y"):
                 continue
             post_id = row.get("ID", "").strip()
-            if not POST_ID.fullmatch(post_id):
+            if not POST_ID_RE.fullmatch(post_id):
                 continue
             status = db["publications"].get(post_id, {})
             suite = db["suite"].get(post_id, {})
@@ -293,7 +287,7 @@ def create_app(root: Path | None = None) -> Flask:
             slides=slides, db=db, logs=safe_log_lines(root),
             csrf_pause=action_token("pause"), csrf_resume=action_token("resume"),
             csrf_start=action_token("business-suite-start"), google_error=google_error,
-            task_state=task_state(), autopublish=os.getenv("ARAYFLOW_AUTOPUBLISH_ENABLED", "").lower() == "true",
+            task_state=task_state(), autopublish=autopublish_enabled(),
             remote_count=count_remote, r2_error=r2_error,
             approved=sum(p["approved"] for p in posts),
             published=sum(p["publication_status"] == "published" for p in posts),
@@ -301,13 +295,12 @@ def create_app(root: Path | None = None) -> Flask:
             suite_scheduled=sum(p["suite_status"] == "scheduled" for p in posts),
             suite_pending=sum(p["suite_status"] in ("awaiting_confirmation", "needs_review") for p in posts),
             failures=sum(p["publication_status"] in ("uncertain", "failed", "preparing") for p in posts),
-            spreadsheet_url="https://docs.google.com/spreadsheets/d/" +
-                os.getenv("GOOGLE_SPREADSHEET_ID", "1dA5GFM2qS6RXzpgEiBXLHO4uYkwp4l46B17dCZCcZKM") + "/edit",
+            spreadsheet_url=spreadsheet_url(),
         )
 
     @app.get("/media/<post_id>/<int:slide>")
     def media(post_id, slide):
-        if not POST_ID.fullmatch(post_id) or not 1 <= slide <= 10:
+        if not POST_ID_RE.fullmatch(post_id) or not 1 <= slide <= 10:
             abort(404)
         files = slides_for(root, post_id)
         if slide > len(files):
@@ -330,7 +323,7 @@ def create_app(root: Path | None = None) -> Flask:
         if sys.platform != "win32":
             flash("Abertura direta disponivel somente no Windows; use o comando do painel.", "error")
             return redirect(url_for("dashboard", date=day))
-        if os.getenv("ARAYFLOW_AUTOPUBLISH_ENABLED", "").strip().lower() == "true":
+        if autopublish_enabled():
             flash("Desative ARAYFLOW_AUTOPUBLISH_ENABLED no .env e reinicie o Flask antes de abrir.", "error")
             return redirect(url_for("dashboard", date=day))
         if task_state() in {"Ready", "Running", "Queued"}:
