@@ -141,13 +141,20 @@ def extract_text(result) -> str:
 
 
 def parse_business_pages(output: str) -> list[int]:
-    """Somente abas do Meta Business Suite, sem navegar/ler outras paginas."""
-    return [
-        int(match[1])
-        for match in PAGE_PATTERN.finditer(output)
-        if re.match(r"https://business\.facebook\.com(?:/|$)", match[2], re.I)
-    ]
+    """Seleciona somente o hostname business.facebook.com, inclusive ?query.
 
+    URLs/titulos das outras abas nunca sao exibidos.
+    """
+    ids: list[int] = []
+    for match in PAGE_PATTERN.finditer(output):
+        candidate = match[2].rstrip(").,]")
+        try:
+            parsed = urlsplit(candidate)
+        except ValueError:
+            continue
+        if parsed.scheme in {"http", "https"} and parsed.hostname == "business.facebook.com":
+            ids.append(int(match[1]))
+    return ids
 
 def unique_uid(snapshot: str, label: re.Pattern[str], allowed: re.Pattern[str]) -> str | None:
     """Retorna uid apenas se houver UM controle nao ambiguo no snapshot atual."""
@@ -195,9 +202,33 @@ class ChromeMCP:
             )
         return extract_text(result)
 
-    async def meta_page(self) -> int:
+    async def meta_page(self, *, create_if_missing: bool = True) -> int:
+        """Seleciona a aba correta; inspecao nao abre novas abas.
+
+        Apos new_page, a aba pode demorar alguns instantes a carregar ou
+        redirecionar ao login. Nunca usa ID presumido do navegador.
+        """
         listing = await self.call("list_pages")
         options = parse_business_pages(listing)
+        if not options and create_if_missing:
+            print("[INFO] Abrindo uma aba do Business Suite no Chrome pessoal ja aberto.")
+            await self.call("new_page", url=META_URL, background=False)
+            for attempt in range(7):
+                listing = await self.call("list_pages")
+                options = parse_business_pages(listing)
+                if options:
+                    break
+                if attempt < 6:
+                    await asyncio.sleep(0.4)
+        if not options:
+            # Nunca registrar URL, titulo nem snapshot de outras abas.
+            total_pages = len(re.findall(r"(?m)^\\s*(?:[-*]\\s*)?\\d+:\\s+", listing))
+            raise RuntimeError(
+                "Chrome MCP conectado, mas nenhuma aba em business.facebook.com foi encontrada "
+                f"({total_pages} abas enumeradas). Abra https://business.facebook.com/ "
+                "manualmente no Chrome JA ABERTO, conclua eventuais logins, "
+                "abra Criar publicacao e tente novamente."
+            )
         if len(options) > 1:
             print(f"[CHROME] Encontradas {len(options)} abas do Meta Business Suite.")
             print("IDs disponiveis: " + ", ".join(str(option) for option in options))
@@ -206,15 +237,6 @@ class ChromeMCP:
                 if not selection.isascii() or not selection.isdecimal() or int(selection) not in options:
                     raise ValueError("ID de aba invalido; nenhuma aba sera modificada")
                 options = [int(selection)]
-        if not options:
-            print("[INFO] Abrindo uma aba do Business Suite no Chrome pessoal ja aberto.")
-            await self.call("new_page", url=META_URL, background=False)
-            options = parse_business_pages(await self.call("list_pages"))
-        if not options:
-            raise RuntimeError(
-                "Chrome conectado, mas nenhuma aba Business Suite foi encontrada. "
-                "Abra https://business.facebook.com/ manualmente e tente novamente."
-            )
         page_id = options[0]
         await self.call("select_page", pageId=page_id, bringToFront=True)
         return page_id
@@ -388,7 +410,7 @@ async def inspect_existing_composer() -> None:
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 bridge = ChromeMCP(session)
-                page_id = await bridge.meta_page()
+                page_id = await bridge.meta_page(create_if_missing=False)
                 await bridge.assert_meta_page(page_id)
                 fields = discover_fields(await bridge.call("take_snapshot", pageId=page_id))
                 for name, found in field_report(fields).items():
