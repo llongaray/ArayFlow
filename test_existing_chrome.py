@@ -75,14 +75,14 @@ class ExistingChromeTests(unittest.TestCase):
 
     def test_business_suite_root_with_query_is_recognized(self):
         pages = (
-            "## Pages\\n0: https://business.facebook.com?business_id=1234 [selected]\\n"
-            "1: https://business.facebook.com.evil.invalid/latest/home\\n"
+            "## Pages\n0: https://business.facebook.com?business_id=1234 [selected]\n"
+            "1: https://business.facebook.com.evil.invalid/latest/home\n"
             "2: https://www.facebook.com/login"
         )
         self.assertEqual(parse_business_pages(pages), [0])
 
     def test_inspect_requires_existing_business_tab_and_does_not_open_new(self):
-        fake = FakeSession("## Pages\\n1: https://www.facebook.com/login")
+        fake = FakeSession("## Pages\n1: https://www.facebook.com/login")
         with self.assertRaisesRegex(RuntimeError, "Abra"):
             asyncio.run(ChromeMCP(fake).meta_page(create_if_missing=False))
         names = [name for name, _ in fake.calls]
@@ -92,7 +92,7 @@ class ExistingChromeTests(unittest.TestCase):
     def test_new_suite_tab_can_take_time_to_appear(self):
         class DelayedSession(FakeSession):
             def __init__(self):
-                super().__init__("## Pages\\n1: https://www.facebook.com/login")
+                super().__init__("## Pages\n1: https://www.facebook.com/login")
                 self.polls = 0
                 self.opened = False
 
@@ -104,7 +104,7 @@ class ExistingChromeTests(unittest.TestCase):
                 if name == "list_pages":
                     self.polls += 1
                     if self.opened and self.polls >= 3:
-                        return reply("## Pages\\n2: https://business.facebook.com/latest/home")
+                        return reply("## Pages\n2: https://business.facebook.com/latest/home")
                     return reply(self.pages)
                 return reply("OK")
 
