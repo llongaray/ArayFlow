@@ -9,7 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch, AsyncMock
 
-from business_suite_forms import (discover_fields, plan_form_values, validate_media_files)
+from business_suite_forms import (discover_fields, plan_form_values, safe_composer_hints, validate_media_files)
 from existing_chrome import (
     ChromeMCP, chrome_connection_args, extract_text, parse_business_pages,
     server_command, unique_uid, CAPTION_TERMS, UPLOAD_TERMS,
@@ -82,6 +82,64 @@ class ExistingChromeTests(unittest.TestCase):
         self.assertEqual(page, 2)
         self.assertNotIn("new_page", [tool for tool, _ in fake.calls])
         self.assertIn(("select_page", {"pageId": 2, "bringToFront": True}), fake.calls)
+
+    def test_real_meta_portuguese_labels_from_screenshot(self):
+        snapshot = (
+            'uid=3_1 button "Adicionar foto/vídeo"\n'
+            'uid=3_2 textbox "Texto" multiline\n'
+            'uid=3_3 switch "Definir data e hora" checked=false\n'
+            'uid=3_4 button "Publicar"'
+        )
+        fields = discover_fields(snapshot)
+        self.assertEqual(fields.upload_uid, "3_1")
+        self.assertEqual(fields.caption_uid, "3_2")
+        self.assertIsNone(fields.date_uid)
+        self.assertIsNone(fields.time_uid)
+        self.assertTrue(safe_composer_hints(snapshot)["schedule_switch_present"])
+        self.assertEqual(safe_composer_hints(snapshot)["textbox_controls"], 1)
+
+    def test_real_meta_pt_br_schedule_fields_only_after_toggle(self):
+        snapshot = (
+            'uid=4_1 button "Adicionar foto/vídeo"\n'
+            'uid=4_2 textbox "Texto" multiline\n'
+            'uid=4_3 switch "Definir data e hora" checked\n'
+            'uid=4_4 textbox "Data"\n'
+            'uid=4_5 textbox "Horário"\n'
+            'uid=4_6 button "Agendar"'
+        )
+        fields = discover_fields(snapshot)
+        self.assertEqual(
+            (fields.upload_uid, fields.caption_uid, fields.date_uid, fields.time_uid),
+            ("4_1", "4_2", "4_4", "4_5"),
+        )
+        scheduled = datetime(2026, 10, 20, 19, 0, tzinfo=ZoneInfo("America/Sao_Paulo"))
+        self.assertEqual(plan_form_values(fields, "Legenda", scheduled), [
+            {"uid": "4_2", "value": "Legenda"},
+            {"uid": "4_4", "value": "20/10/2026"},
+            {"uid": "4_5", "value": "19:00"},
+        ])
+
+    def test_unnamed_textbox_stays_manual_and_hints_only_count(self):
+        snapshot = (
+            'uid=5_1 generic "Texto"\n'
+            'uid=5_2 textbox\n'
+            'uid=5_3 button "Adicionar foto/vídeo"'
+        )
+        fields = discover_fields(snapshot)
+        self.assertIsNone(fields.caption_uid)
+        hints = safe_composer_hints(snapshot)
+        self.assertEqual(hints["unlabelled_textboxes"], 1)
+        self.assertEqual(hints["textbox_controls"], 1)
+        self.assertTrue(hints["text_label"])
+        self.assertTrue(hints["add_media_button"])
+        self.assertNotIn("caption", str(hints))
+
+    def test_duplicate_text_inputs_not_autofilled(self):
+        fields = discover_fields(
+            'uid=6_1 textbox "Texto"\nuid=6_2 textbox "Texto"'
+        )
+        self.assertIsNone(fields.caption_uid)
+        self.assertIn("legenda", fields.ambiguous)
 
     def test_existing_business_tab_is_reused_without_new_browser(self):
         fake = FakeSession(
