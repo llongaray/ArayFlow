@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
+from datetime import datetime
 from urllib.parse import quote, urlsplit
 
 from dotenv import load_dotenv
@@ -45,26 +46,73 @@ class R2Storage:
         return f"arayflow/{day}/{post_id}/{path.name}"
 
     def url_for(self, key: str) -> str:
-        if not _KEY_RE.fullmatch(key):
+        if not self.is_managed_key(key):
             raise ValueError("Chave de objeto R2 invalida")
         return f"{self.public_url}/{quote(key, safe='/')}"
+
+    @staticmethod
+    def is_managed_key(key: str) -> bool:
+        """Exclui somente objetos da estrutura gerenciada pelo ArayFlow."""
+        if not _KEY_RE.fullmatch(key):
+            return False
+        parts = key.split("/")
+        _, day, post_id, filename = parts
+        try:
+            parsed_day = datetime.strptime(post_id[5:13], "%Y%m%d").strftime("%Y-%m-%d")
+        except ValueError:
+            return False
+        return day == parsed_day and bool(re.fullmatch(
+            re.escape(post_id) + r"_slide-\\d+\\.(png|jpg|jpeg)", filename, re.I
+        ))
+
+    def list_managed(self) -> list[str]:
+        """Lista todos os objetos do prefixo gerenciado, inclusive pagina 2+."""
+        keys = []
+        token = None
+        seen = set()
+        while True:
+            kwargs = {"Bucket": self.bucket, "Prefix": "arayflow/", "MaxKeys": 1000}
+            if token:
+                kwargs["ContinuationToken"] = token
+            page = self.client.list_objects_v2(**kwargs)
+            for obj in page.get("Contents", []):
+                key = obj.get("Key", "")
+                if self.is_managed_key(key):
+                    keys.append(key)
+            if not page.get("IsTruncated", False):
+                break
+            token = page.get("NextContinuationToken")
+            if not token or token in seen:
+                raise RuntimeError("Paginacao R2 inconsistente; limpeza cancelada")
+            seen.add(token)
+        return sorted(set(keys))
+
+    def remote_sha256(self, key: str) -> str | None:
+        if not self.is_managed_key(key):
+            raise ValueError("Chave R2 fora do padrao gerenciado")
+        info = self.client.head_object(Bucket=self.bucket, Key=key)
+        return (info.get("Metadata") or {}).get("sha256")
 
     def check(self):
         return self.client.head_bucket(Bucket=self.bucket)
 
-    def upload(self, post_id: str, path: Path) -> tuple[str, str]:
+    def upload(self, post_id: str, path: Path, sha256: str | None = None) -> tuple[str, str]:
         path = Path(path)
         if not path.is_file():
             raise FileNotFoundError(path)
         key = self.key_for(post_id, path)
         content_type = "image/png" if path.suffix.lower() == ".png" else "image/jpeg"
         # Nunca habilitar ACL 'public-read': acesso publico e configurado no bucket.
-        self.client.upload_file(str(path), self.bucket, key,
-                                ExtraArgs={"ContentType": content_type, "CacheControl":"public, max-age=300"})
+        extra = {"ContentType": content_type, "CacheControl": "public, max-age=300"}
+        if sha256:
+            if not re.fullmatch(r"[a-f0-9]{64}", sha256):
+                raise ValueError("SHA256 invalido")
+            extra["Metadata"] = {"sha256": sha256}
+        self.client.upload_file(str(path), self.bucket, key, ExtraArgs=extra)
         self.client.head_object(Bucket=self.bucket, Key=key)
         return key, self.url_for(key)
 
     def delete(self, key: str):
-        if not _KEY_RE.fullmatch(key):
+        if not self.is_managed_key(key):
             raise ValueError("Recusada exclusao fora do prefixo gerenciado pelo ArayFlow")
         self.client.delete_object(Bucket=self.bucket, Key=key)
