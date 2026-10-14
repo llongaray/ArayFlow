@@ -254,7 +254,7 @@ class MetaSuiteTests(unittest.TestCase):
             accepted = app.test_client().post(
                 "/business-suite/start",
                 data={"csrf": token.group(1), "confirmation": "ABRIR",
-                      "date": "2026-10-14"},
+                      "date": "2026-10-14", "browser": "existing"},
                 headers={
                     "Host": "127.0.0.1:8766", "Origin": "null",
                     "Sec-Fetch-Site": "same-origin",
@@ -262,6 +262,7 @@ class MetaSuiteTests(unittest.TestCase):
             )
             self.assertEqual(accepted.status_code, 302)
             popen.assert_called_once()
+            self.assertEqual(popen.call_args.args[0][-2:], ["--browser", "existing"])
 
     def test_business_suite_null_origin_from_cross_site_is_blocked(self):
         import os
