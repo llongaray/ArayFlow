@@ -167,3 +167,99 @@ python publish_post.py --post ARAY-20261014-001 --manifest .\data\ARAY-20261014-
 O passo `--prepare` cria conteineres na Meta, mas nao publica. `--publish` e separado, publica imediatamente e exige `PUBLICAR ARAY`.
 
 **Limitacoes e seguranca:** URLs no dominio r2.dev sao publicas; ele serve para testes, nao hospedagem de producao. Uploads geram consumo R2; acompanhe as metricas e limites gratuitos. **A exclusao automatica ainda nao esta ativada**, para evitar que imagens sejam removidas antes de a Meta processar os conteineres. O metodo de exclusao do modulo R2 restringe o prefixo gerenciado, mas requer futura rotina de limpeza supervisionada. Integracao real R2/Meta ainda exige validacao local; este commit nao prova conectividade com sua conta.
+
+
+
+---
+
+## ArayFlow v0.4.0 — sessoes e limpeza diaria segura
+
+**Objetivo:** manter no Cloudflare R2 apenas as artes do dia selecionado, exceto
+imagens ainda necessarias para conteineres Meta e sessoes incompletas.
+
+### Comandos no Windows (sempre no .venv)
+
+```powershell
+git pull origin main
+python -m pip install -r requirements.txt
+python -m unittest test_arayflow test_r2 test_sync -v
+```
+
+**1. Consultar sessoes anteriores (SQLite local):**
+
+```powershell
+python sync_day.py --sessions
+```
+
+**2. Planejar a sincronizacao SEM apagar ou enviar arquivos (padrao):**
+
+```powershell
+python sync_day.py --date 2026-10-14
+```
+
+Antes de prosseguir, confira a lista de `[REMOVER]`, `[PROTEGER]`,
+`[ENVIAR]` e `[REUTILIZAR]`. O comando consulta Google Sheets e R2,
+mas NAO faz modificacoes.
+
+**3. Sincronizar o dia com limpeza REAL:**
+
+```powershell
+python sync_day.py --date 2026-10-14 --apply
+```
+
+O programa exige a confirmacao exata `SINCRONIZAR 2026-10-14`.
+Esta operacao **apaga objetos antigos elegiveis do R2 e envia/substitui
+imagens**, mas **nao publica no Instagram**. Leia o plano com atencao.
+
+**4. Publicar posteriormente, apos a revisao editorial:**
+
+A sincronizacao cria manifestos em `data/<POST_ID>-r2-urls.json`,
+reutilizados pelo publicador que ja existe:
+
+```powershell
+python publish_post.py --post ARAY-20261014-001 --manifest .\data\ARAY-20261014-001-r2-urls.json --prepare
+```
+
+`--prepare` exige aprovacao no Sheets e confirmacao separada;
+`--publish` continua sendo outro comando com confirmacao de publicacao
+real e imediata.
+
+### Regras de seguranca da limpeza
+
+1. Valida primeiro TODAS as imagens locais, quantidades, proporcoes e legendas.
+   Se alguma estiver faltando/corrompida, **nao apaga nada**.
+2. Lista todos os objetos do prefixo `arayflow/`, com paginacao.
+   Ignora objetos fora desse prefixo ou fora do padrao de nomes seguro.
+3. Objetos de outros dias e imagens nao pertencentes aos posts selecionados
+   podem ser excluidos, MAS nunca quando forem de posts com status SQLite
+   `prepared`, `publishing`, `uncertain` ou `failed` com conteiner Meta.
+4. Protege tambem os dias de sessoes `running` ou `failed`
+   ate que a sessao seja resolvida/retomada. Assim um erro nao apaga
+   automaticamente imagens que podem estar em uso. Em casos protegidos,
+   pode haver objetos de mais de um dia no R2.
+5. Para os objetos do dia, reutiliza apenas se o SHA-256 gravado nos metadados
+   do R2 corresponder ao arquivo local. Objetos enviados pela v0.3.0,
+   que nao possuem hash nos metadados, serao enviados novamente uma vez.
+6. Faz a limpeza elegivel ANTES dos novos uploads, sempre depois da validacao
+   e confirmacao explicita. Se houver falha, salva `failed` no SQLite
+   e a execucao seguinte retoma/verifica o estado remoto.
+7. Nao mexe em objetos fora do bucket configurado e nunca apaga credenciais,
+   imagens locais, arquivos do Google Drive ou posts no Instagram.
+
+### Persistencia
+
+- Sessao de cada dia: `daily_syncs`.
+- Hashes das imagens conhecidas: `r2_assets`.
+- Log de sincronizacao e remocoes: `r2_events`.
+- Estados e IDs de contêineres/publicacoes Meta: `publications` (versao anterior).
+- Banco local: `data/arayflow.sqlite3`, ignorado pelo Git.
+- Credenciais permanecem no `.env` e `config/google_token.json`.
+
+**Ainda nao existe execucao automatica por horario.** Execute a
+sincronizacao quando desejar ou integre-a futuramente ao Agendador de Tarefas
+do Windows. Para operacao sem confirmacao interativa, precisaremos de regras
+de seguranca adicionais antes de habilitar modo autonomo.
+
+**Observacao:** GitHub Actions executa apenas testes unitarios simulados; nao
+usa credenciais e nao conecta no seu bucket. A conectividade R2 real e a
+exclusao real dependem de validacao local supervisionada.
