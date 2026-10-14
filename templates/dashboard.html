@@ -132,6 +132,16 @@
             <h3>Agende o dia inteiro em uma sessão.</h3>
             <p>O navegador abre sua conta Meta, tenta preencher artes e legendas e apresenta cada post. Você confere o horário e clica em <strong>Agendar</strong> no Business Suite. O sistema só registra a confirmação após sua validação.</p>
             {% if autopublish %}<div class="notification error">A automação pela Graph API está AUTORIZADA no .env. Antes de usar o assistente Playwright, altere <code>ARAYFLOW_AUTOPUBLISH_ENABLED=false</code> e pause a tarefa Windows para evitar duplicatas.</div>{% endif %}
+            {% if not autopublish and task_state not in ['Ready','Running','Queued'] %}
+            <form action="{{ url_for('start_business_suite') }}" method="post" class="start-form">
+              <input type="hidden" name="csrf" value="{{ csrf }}">
+              <input type="hidden" name="date" value="{{ day }}">
+              <input type="hidden" name="confirmation" value="ABRIR">
+              <button class="button primary" type="submit">◈ Abrir assistente do Business Suite</button>
+            </form>
+            {% else %}
+            <div class="notification error">O botao de abertura fica bloqueado ate desativar a API no .env e pausar a tarefa Windows. O assistente tambem verifica isso antes de iniciar.</div>
+            {% endif %}
             <div class="cli"><code id="suite-command">python business_suite_assistant.py --date {{ day }} --start</code><button type="button" class="copy-button" data-copy-target="suite-command">Copiar comando</button></div>
             <div class="cli secondary-cli"><code id="suite-status-command">python business_suite_assistant.py --status</code><button type="button" class="copy-button" data-copy-target="suite-status-command">Copiar</button></div>
             <p class="support-note">Execute o comando no PowerShell com o <code>.venv</code> ativo. O assistente não clica no botão final nem tenta contornar autenticação. Não precisa deixar o computador ligado após confirmar os posts no Business Suite.</p>
