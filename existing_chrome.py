@@ -159,11 +159,11 @@ def connection_failure_details(error: BaseException) -> str:
         visited.add(id(exc))
         kind = type(exc).__name__
         message = str(exc).splitlines()[0][:500] if str(exc).strip() else "sem descricao"
-        message = re.sub(r"https?://\\S+", "[URL]", message)
+        message = re.sub(r"https?://\S+", "[URL]", message)
         message = re.sub(
-            r"(?i)\\b(token|cookie|password|secret|authorization|api[_-]?key)\\b"
-            r"\\s*[:=]\\s*[^\\s,;]+",
-            r"\\1=[OCULTO]",
+            r"(?i)\b(token|cookie|password|secret|authorization|api[_-]?key)\b"
+            r"\s*[:=]\s*[^\s,;]+",
+            r"\1=[OCULTO]",
             message,
         )
         # Descarta conteudo nao necessario de mensagens de processos externos.
