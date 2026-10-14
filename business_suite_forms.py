@@ -250,15 +250,15 @@ def safe_control_shapes(snapshot: str) -> dict[str, object]:
         if role == "spinbutton" and not label:
             unlabeled_spins += 1
         if role in {"combobox", "spinbutton", "button", "input"} and label:
-            if re.search(r"(?i)\\b(?:dia|day)\\b", label):
+            if re.search(r"(?i)\b(?:dia|day)\b", label):
                 segment_roles["day"].add(role)
-            if re.search(r"(?i)\\b(?:m[eê]s|month|janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\\b", label):
+            if re.search(r"(?i)\b(?:m[eê]s|month|janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b", label):
                 segment_roles["month"].add(role)
-            if re.search(r"(?i)\\b(?:ano|year)\\b", label):
+            if re.search(r"(?i)\b(?:ano|year)\b", label):
                 segment_roles["year"].add(role)
-            if re.search(r"(?i)\\b(?:hora|hor[aá]rio|hour)\\b", label):
+            if re.search(r"(?i)\b(?:hora|hor[aá]rio|hour)\b", label):
                 segment_roles["hour"].add(role)
-            if re.search(r"(?i)\\b(?:minutos?|minutes?)\\b", label):
+            if re.search(r"(?i)\b(?:minutos?|minutes?)\b", label):
                 segment_roles["minute"].add(role)
         if role == "textbox":
             if not label:
