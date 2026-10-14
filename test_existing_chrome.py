@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from existing_chrome import (
     ChromeMCP, extract_text, parse_business_pages, server_command, unique_uid,
-    CAPTION_TERMS, UPLOAD_TERMS, connection_failure_details,
+    CAPTION_TERMS, UPLOAD_TERMS, connection_failure_details, describe_mcp_tool_error,
 )
 import re
 
@@ -125,6 +125,41 @@ class ExistingChromeTests(unittest.TestCase):
         self.assertNotIn("BearerPrivate", summary)
         self.assertNotIn("sessionvalue", summary)
         self.assertIn("[URL]", summary)
+
+    def test_list_pages_timeout_explains_problem_without_leaking_data(self):
+        result = reply(
+            "ProtocolError: Network.enable timed out. "
+            "URL https://business.facebook.com/?session=secret123 "
+            "Authorization:Bearer abcdef", error=True
+        )
+        description = describe_mcp_tool_error(result)
+        self.assertIn("Network.enable", description)
+        self.assertNotIn("secret123", description)
+        self.assertNotIn("abcdef", description)
+
+        class FailedSession:
+            async def call_tool(self, name, arguments=None):
+                return result
+
+        with self.assertRaisesRegex(RuntimeError, "Network.enable"):
+            asyncio.run(ChromeMCP(FailedSession()).call("list_pages"))
+
+    def test_devtools_active_port_reports_specific_diagnostic(self):
+        result = reply(
+            "Could not find DevToolsActivePort in Chrome profile. "
+            "cookie=my_private_session", error=True
+        )
+        self.assertIn("DevToolsActivePort", describe_mcp_tool_error(result))
+        self.assertNotIn("my_private_session", describe_mcp_tool_error(result))
+
+    def test_unknown_browser_tool_error_is_redacted(self):
+        result = reply(
+            "Unknown: https://mail.google.com/?token=supersecret", error=True
+        )
+        diagnosis = describe_mcp_tool_error(result)
+        self.assertIn("nao classificada", diagnosis)
+        self.assertNotIn("mail.google.com", diagnosis)
+        self.assertNotIn("supersecret", diagnosis)
 
     def test_node_missing_has_actionable_error(self):
         with patch("existing_chrome.shutil.which", return_value=None):
