@@ -918,3 +918,28 @@ Clear-Host; git pull origin main; if ($LASTEXITCODE -eq 0) { python -m unittest 
 Os testes offline usam snapshots simulados e nao substituem o teste
 com o compositor REAL. A automacao nao envia o formulario final de
 agendamento, e so grava `scheduled` apos confirmacao no Planejador.
+
+
+### Diagnostico seguinte: tipos reais dos campos
+
+Na tela Meta em portugues, imagens foram identificadas, mas legenda,
+data e hora apareceram como MANUAL mesmo com "Definir data e hora" ligado.
+A inspecao passou a informar, sem revelar texto de posts nem valores:
+
+* Contagem de controles (textbox, button, combobox, spinbutton, switch, input)
+* Quantos textboxes possuem nome distinto do rótulo "Texto"/"Legenda"
+* Quais papeis possuem valores com aparencia de data e de horario
+* Se textos que parecem data e hora estao presentes no snapshot
+
+Isso distingue os campos em botao/calendario dos textboxes tradicionais.
+O diagnostico permanece somente leitura. Nao altera planilha nem SQLite.
+
+No PowerShell 5.1, com a conta correta e "Definir data e hora" ligado:
+
+```powershell
+Clear-Host; git pull origin main; if ($LASTEXITCODE -eq 0) { python -m unittest test_existing_chrome test_business_suite -v; if ($LASTEXITCODE -eq 0) { python business_suite_assistant.py --inspect-composer } }
+```
+
+Os testes offline nao substituem a primeira observacao do snapshot
+real. O sistema NAO passa a preencher data e hora baseado somente em
+texto visual semelhante: isso exige identificar os controles editaveis.
