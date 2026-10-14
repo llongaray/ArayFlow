@@ -161,22 +161,27 @@ def execute_plan(day: str, assets: list[dict], plan: dict,
                  storage: R2Storage, store: SyncStore):
     store.begin(day)
     try:
+        # Inventario da revisao final; nao faz uma listagem remota por imagem.
+        available = set(plan["remote"])
         # Apaga arquivos antigos ANTES dos uploads, apos pre-validar os arquivos locais.
         for key in plan["delete"]:
             storage.delete(key)
+            available.discard(key)
             store.forget_asset(day, key)
             print(f"  [EXCLUIDO] {key}")
         for item in assets:
             key, digest = item["key"], item["sha256"]
-            # Confere estado remoto novamente: suporta recuperacao apos crash.
-            # Mesmo objetos enviados anteriormente precisam ter hash comprovado.
-            remote = storage.list_managed()
-            if key in remote and storage.remote_sha256(key) == digest:
+            # Interrompe se o arquivo local mudou depois da validacao.
+            if sha256_file(item["path"]) != digest:
+                raise RuntimeError(f"Arquivo local mudou durante a sincronizacao: {item['path']}")
+            # Metadados SHA-256 persistentes permitem retomar uploads interrompidos.
+            if key in available and storage.remote_sha256(key) == digest:
                 print(f"  [REUTILIZADO] {key}")
             else:
                 storage.upload(item["post_id"], item["path"], sha256=digest)
                 if storage.remote_sha256(key) != digest:
                     raise RuntimeError(f"SHA256 nao confirmado no R2: {key}")
+                available.add(key)
                 print(f"  [ENVIADO] {key}")
             store.record_asset(day, item["post_id"], key, digest)
         write_manifests(assets)
