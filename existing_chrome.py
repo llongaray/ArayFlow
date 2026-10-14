@@ -487,6 +487,16 @@ async def inspect_existing_composer() -> None:
                 print("[DATA/HORA] Valores aparentes presentes no snapshot: "
                       f"data={'SIM' if shapes['date_text_visible'] else 'NAO'}, "
                       f"hora={'SIM' if shapes['time_text_visible'] else 'NAO'}")
+                print("[DATA/HORA] Segmentos acessiveis por funcao: "
+                      + " | ".join(
+                          f"{name}={','.join(shapes['segments'][name]) or '-'}"
+                          for name in ("day", "month", "year", "hour", "minute")
+                      ))
+                print(f"[DATA/HORA] Controles numericos sem nome: "
+                      f"{shapes['unnamed_spinbuttons']}")
+                if fields.caption_uid and texts['caption'] == 0:
+                    print("[LEGENDA] Editor identificado por contexto do compositor "
+                          "e exclusividade do textbox; confira antes de escrever.")
                 if fields.ambiguous:
                     print("[AMBIGUO] " + ", ".join(fields.ambiguous))
                 if not fields.date_uid or not fields.time_uid:
