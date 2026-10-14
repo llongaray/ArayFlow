@@ -326,8 +326,8 @@ class ChromeMCP:
         if not fields.caption_uid:
             print("[MANUAL] Legenda sem campo inequivoco; cole diretamente no Business Suite.")
         if when is not None and not (fields.date_uid and fields.time_uid):
-            print("[MANUAL] Data e horario nao identificados como par de campos. "
-                  "Abra as opcoes de Programar na Meta e preencha manualmente.")
+            print("[INFO] Data e horario nao estao no snapshot como textboxes nomeados. "
+                  "E possivel testar o preenchimento DOM opt-in; caso contrario, ajuste manualmente.")
         if plan:
             try:
                 await self.call("fill_form", pageId=page_id, elements=plan,
