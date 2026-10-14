@@ -114,6 +114,53 @@ class ExistingChromeTests(unittest.TestCase):
         self.assertEqual(result, 2)
         self.assertEqual(sum(name == "new_page" for name, _ in fake.calls), 1)
 
+    def test_chrome_opening_falls_back_to_manual_login_and_recheck(self):
+        class LoginRedirectSession(FakeSession):
+            def __init__(self):
+                super().__init__("## Pages\n1: https://www.facebook.com/login")
+                self.requests = 0
+                self.login_complete = False
+
+            async def call_tool(self, name, arguments=None):
+                self.calls.append((name, arguments))
+                if name == "new_page":
+                    self.requests += 1
+                    return reply("Pagina Meta aberta, aguarde login")
+                if name == "list_pages":
+                    if self.login_complete:
+                        return reply("## Pages\n2: https://business.facebook.com/latest/home")
+                    return reply(self.pages)
+                return reply("OK")
+
+        fake = LoginRedirectSession()
+        def finish_login(_prompt):
+            fake.login_complete = True
+            return "VERIFICAR ABA"
+
+        with patch("existing_chrome.asyncio.sleep", new_callable=AsyncMock), \
+             patch("builtins.input", side_effect=finish_login):
+            page_id = asyncio.run(ChromeMCP(fake).meta_page())
+        self.assertEqual(page_id, 2)
+        self.assertEqual(fake.requests, 1)
+        self.assertIn(("select_page", {"pageId": 2, "bringToFront": True}), fake.calls)
+
+    def test_chrome_opening_can_be_cancelled_after_login_redirect(self):
+        fake = FakeSession("## Pages\n1: https://www.facebook.com/login")
+        # Esta sessao falsa continua redirecionada mesmo apos new_page.
+        class RedirectSession(FakeSession):
+            async def call_tool(self, name, arguments=None):
+                if name == "new_page":
+                    self.calls.append((name, arguments))
+                    return reply("Redirect to login")
+                return await super().call_tool(name, arguments)
+
+        fake = RedirectSession(fake.pages)
+        with patch("existing_chrome.asyncio.sleep", new_callable=AsyncMock), \
+             patch("builtins.input", return_value=""):
+            with self.assertRaisesRegex(RuntimeError, "nenhuma aba"):
+                asyncio.run(ChromeMCP(fake).meta_page())
+        self.assertEqual(sum(name == "new_page" for name, _ in fake.calls), 1)
+
     def test_unambiguous_fields_prefill_without_schedule_click(self):
         fake = FakeSession(
             "## Pages\n1: https://business.facebook.com/",
